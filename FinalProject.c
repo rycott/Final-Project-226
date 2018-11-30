@@ -12,14 +12,19 @@
 #define RW BIT2  //RW is on 4.2
 #define EN BIT3  //EN is 4.3
 #define BUFFER_SIZE 100
-
+int settime_but = 0;
+void butt_init(void);
+void settime(void);
+void setalarm();
 //LCD Function Declarations
+
     void delayMs (uint32_t n);
     void nibblewrite(unsigned char data, unsigned char control);
     void command(unsigned char command);
     void data(unsigned char data);
     void LCDinit(void);
     void SysTick_init(void);
+    void init_display_screen(void);
 //UART Function Declarations
     void writeOutput(char *string); // write output charactrs to the serial port
     void readInput(char* string); // read input characters from INPUT_BUFFER that are valid
@@ -30,36 +35,94 @@
 
 void main(void)
 {
-	WDT_A->CTL = WDT_A_CTL_PW | WDT_A_CTL_HOLD;		// stop watchdog timer
+    WDT_A->CTL = WDT_A_CTL_PW | WDT_A_CTL_HOLD;     // stop watchdog timer
+    butt_init();
+    __enable_irq();                  /* global enable IRQs */
+    init_display_screen();
+    while(1)
+    {
+        readInput(string); // Read the input up to \n, store in string.  This function doesn't return until \n is received
+        puts(string);
+        if(string[0] != '\0') // if string is not empty, check the inputted data.
+             {
 
-	while(1)
-	{
-	    readInput(string); // Read the input up to \n, store in string.  This function doesn't return until \n is received
-	    puts(string);
-	    if(string[0] != '\0') // if string is not empty, check the inputted data.
-	         {
+                if(string[0] == 'T') //Setting the time for the clock
+             {
 
-	            if(string[0] == 'T') //Setting the time for the clock
-	         {
+             }
 
-	         }
+                if(string[0] == 'A') //setting the alarm time
+                {
 
-	            if(string[0] == 'A') //setting the alarm time
-	            {
-
-	            }
+                }
 
 
-	         }
-	}
+             }
+    }
 }
 
 
 
 
 
+void butt_init(void)
+{
+    /* configure P1.1, P1.4 for switch inputs */
+    P5->SEL1 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);    /* configure P1.1, P1.4 as simple I/O */
+    P5->SEL0 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);
+    P5->DIR &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);     /* P1.1, P1.4 set as input */
+    P5->REN |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* P1.1, P1.4 pull resistor enabled */
+    P5->OUT |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* Pull up/down is selected by P1->OUT */
+    P5->IES |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* make interrupt trigger on high-to-low transition */
+    P5->IFG = 0;          /* clear pending interrupt flags */
+    P5->IE |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);       /* enable interrupt from P1.1, P1.4 */
 
 
+    NVIC_EnableIRQ(PORT5_IRQn);      /* enable interrupt in NVIC */
+
+}
+
+void PORT5_IRQHandler(void) {
+    int i;
+
+    if(P5->IFG & BIT0)//SET TIME BUTTON
+       {
+           settime();
+       }
+    if(P5->IFG & BIT1)//SET ALARM BUTTON
+       {
+           setalarm();
+       }
+    if(P5->IFG & BIT2)//ON/OFF/UP BUTTON
+       {
+
+       }
+    if(P5->IFG & BIT4)//SNOOZE/DOWN
+       {
+
+       }
+    if(P5->IFG & BIT5)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
+       {
+
+       }
+    if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 MINUTE ALARM CLOCK TIME
+       {
+
+       }
+
+    P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6); /* clear the interrupt flag before return */
+}
+void settime(void)
+{
+    int i;
+    char time[]= "HH:MM:SS XM";
+    command(0x80);
+    for(i=0;i<10;i++)
+    {
+        data(time[i]);
+
+    }
+}
 //----------LCD functions----------------------
 
 void LCDinit(void)    //LCD info is in Lab 6 pt. 2 *************
@@ -132,6 +195,34 @@ void data(unsigned char data)  //function to write data to the LCD
     delayMs(1);
 }
 
+void init_display_screen(void)
+{
+    char time[]= "HH:MM:SS XM";
+    char alarmstatus[]= "ALARM: "
+    char alarmtime[]= "HH:MM XM";
+    char temperature[]= "XX.X F";
+    commmand(1);
+    command(0x80);
+    for(i=0;i<10;i++)
+    {
+       data(time[i]);
+    }
+    command(0xC0);
+    for(i=0;i<10;i++)
+    {
+       data(alarmstatus[i]);
+    }
+    command(0x90);
+    for(i=0;i<10;i++)
+    {
+       data(alarmtime[i]);
+    }
+    command(0xD0);
+    for(i=0;i<10;i++)
+    {
+       data(temperature[i]);
+    }
+}
 //-------- UART functions --------------
 
 /*----------------------------------------------------------------
@@ -280,5 +371,4 @@ TIMER_A0 -> CCR[3] = 32000;
 TIMER_A0 -> CCTL[3] = TIMER_A_CCTLN_OUTMOD_7;
 
 }
-
 
