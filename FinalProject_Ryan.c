@@ -77,7 +77,6 @@ void main(void)
 
     __enable_irq();                  /* global enable IRQs */
 
-
    // init_display_screen();
     while(1)
     {
@@ -318,22 +317,22 @@ void init_display_screen(void) //sets initial display of LCD
     char temperature[]= "XX.X F";
     command(1);
     command(0x80);
-    for(i=0;i<10;i++)
+    for(i=0;i<11;i++)
     {
        data(time[i]);
     }
     command(0xC0);
-    for(i=0;i<10;i++)
+    for(i=0;i<7;i++)
     {
        data(alarmstatus[i]);
     }
     command(0x90);
-    for(i=0;i<10;i++)
+    for(i=0;i<8;i++)
     {
        data(alarmtime[i]);
     }
     command(0xD0);
-    for(i=0;i<10;i++)
+    for(i=0;i<6;i++)
     {
        data(temperature[i]);
     }
