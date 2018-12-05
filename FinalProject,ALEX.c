@@ -12,12 +12,13 @@
 #define RW BIT2  //RW is on 4.2
 #define EN BIT3  //EN is 4.3
 #define BUFFER_SIZE 100
-int settime_but = 0;
 int timeout;
 void butt_init(void);
 void settime(void);
+void alarm_on_off(void);
 int settime_pressed=0;
 int setalarm_pressed=0;
+int alarm_status=0;
 //LCD Function Declarations
 
     void delayMs (uint32_t n);
@@ -124,7 +125,7 @@ void main(void)
                  }
 
                  //printing the clock time to the LCD
-                 command(0xC1);
+                 command(0x91);
                  sprintf(hours,"%d", hour); //displaying hours
                  if(hourflag == 0)
                  {
@@ -139,14 +140,14 @@ void main(void)
                      }
                  }
 
-                 command(0xC3);
+                 command(0x93);
                  data(':');
-                 command(0xC4);
+                 command(0x94);
                  sprintf(minutes, "%d", min); //displaying minutes
                  if(minflag == 0)
                  {
                      data('0');
-                     command(0xC5);
+                     command(0x95);
                      data(minutes[0]);
                  }
                  else if(minflag == 1)
@@ -157,14 +158,14 @@ void main(void)
                       }
                  }
 
-                 command(0xC7);
+                 command(0x97);
                  data(':');
-                 command(0xC8);
+                 command(0x98);
                  sprintf(seconds, "%d", sec); //displaying seconds
                  if(secflag == 0)
                  {
                      data('0');
-                     command(0xC9);
+                     command(0x99);
                      data(seconds[0]);
                  }
                  else if(secflag == 1)
@@ -210,14 +211,14 @@ void main(void)
 void butt_init(void) //button initializations
 {
     /* configure P1.1, P1.4 for switch inputs */
-    P5->SEL1 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);    /* configure P1.1, P1.4 as simple I/O */
-    P5->SEL0 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);
-    P5->DIR &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);     /* P1.1, P1.4 set as input */
-    P5->REN |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* P1.1, P1.4 pull resistor enabled */
-    P5->OUT |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* Pull up/down is selected by P1->OUT */
-    P5->IES |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* make interrupt trigger on high-to-low transition */
+    P5->SEL1 &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);    /* configure P1.1, P1.4 as simple I/O */
+    P5->SEL0 &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
+    P5->DIR &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);     /* P1.1, P1.4 set as input */
+    P5->REN |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);      /* P1.1, P1.4 pull resistor enabled */
+    P5->OUT |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);      /* Pull up/down is selected by P1->OUT */
+    P5->IES |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);      /* make interrupt trigger on high-to-low transition */
     P5->IFG = 0;          /* clear pending interrupt flags */
-    P5->IE |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);       /* enable interrupt from P1.1, P1.4 */
+    P5->IE |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);       /* enable interrupt from P1.1, P1.4 */
 
 
     NVIC_EnableIRQ(PORT5_IRQn);      /* enable interrupt in NVIC */
@@ -227,34 +228,46 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
 {
     int i;
 
-    if(P5->IFG & BIT0)//SET TIME BUTTON
+    if(P5->IFG & BIT0)//SET TIME BUTTON BLACK
        {
-          // settime();
+
+        settime_pressed++;
+           settime();
            P1 -> OUT ^= BIT0;
+           P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
+
        }
-    if(P5->IFG & BIT1)//SET ALARM BUTTON
+    if(P5->IFG & BIT1)//SET ALARM BUTTON GREEN
        {
            //setalarm();
         P1 -> OUT ^= BIT0;
+        P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
        }
-    if(P5->IFG & BIT2)//ON/OFF/UP BUTTON
+    if(P5->IFG & BIT2)//ON/OFF/UP BUTTON RED
        {
         P1 -> OUT ^= BIT0;
+        alarm_on_off();
+        P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
        }
-    if(P5->IFG & BIT4)//SNOOZE/DOWN
+    if(P5->IFG & BIT4)//SNOOZE/DOWN BLUE
        {
         P1 -> OUT ^= BIT0;
+        P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
        }
-    if(P5->IFG & BIT5)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
-       {
+    if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
+       // WHITE
+        {
         P1 -> OUT ^= BIT0;
-       }
-    if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 MINUTE ALARM CLOCK TIME
-       {
+        P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
+        }
+    if(P5->IFG & BIT7)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 MINUTE ALARM CLOCK TIME
+      //YELLOW
+        {
         P1 -> OUT ^= BIT0;
-       }
+        P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
+        }
 
-    P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6); /* clear the interrupt flag before return */
+    P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7); /* clear the interrupt flag before return */
 }
 
 //----------LCD functions----------------------
@@ -343,8 +356,8 @@ void init_display_screen(void) //sets initial display of LCD
 
 void settime(void)//pin 5.2=On/Off/Up  5.4=Snooze/Down 5.0=Set Time
 {
-    int i=0;
-    while(i==0)
+    int i;
+    while(settime_pressed==1)
     {
 
 
@@ -406,10 +419,10 @@ void settime(void)//pin 5.2=On/Off/Up  5.4=Snooze/Down 5.0=Set Time
        }
     if(P5->OUT &=~ BIT0)
     {
-        i++;
+        settime_pressed++;
     }
     }
-   while(i==1)
+   while(settime_pressed==2)
    {
        if(min>=60) //this section checks if minutes should roll into an hour
                         {
@@ -444,7 +457,7 @@ void settime(void)//pin 5.2=On/Off/Up  5.4=Snooze/Down 5.0=Set Time
                    command(0xC7);
        if(P5->OUT &=~ BIT0)
            {
-               i++;
+               settime_pressed=0;
            }
    }
 }
@@ -453,7 +466,30 @@ void setalarm(void)
 {
     int i;
 }
-
+void alarm_on_off (void)
+{
+    char alarmstatusoff[] = "ALARM OFF";
+    char alarmstatuson[] = "ALARM  ON";
+    int i;
+    if(alarm_status==0)
+        {
+            alarm_status= 1;
+            command(0xC0);
+            for(i=0;i<9;i++)
+               {
+                  data(alarmstatusoff[i]);
+               }
+        }
+        else
+        {
+            alarm_status= 0;
+            command(0xC0);
+            for(i=0;i<9;i++)
+               {
+                  data(alarmstatuson[i]);
+               }
+        }
+}
 
 //-------------temp sensor functions-------------
 //void settemp(void)
@@ -492,8 +528,8 @@ void setalarm(void)
 //}
 //void PortADC_init(void)
 //{
-//    P5->SEL0 |= BIT7;   //sets pin 5.7 as A0 input
-//    P5->SEL1 |= BIT7;
+//    P5->SEL0 |= BIT5;   //sets pin 5.5 as A0 input
+//    P5->SEL1 |= BIT5;
 //}
 // void ADC14_init(void)
 // {
