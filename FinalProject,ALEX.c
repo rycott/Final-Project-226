@@ -13,11 +13,11 @@
 #define EN BIT3  //EN is 4.3
 #define BUFFER_SIZE 100
 int settime_but = 0;
+int timeout;
 void butt_init(void);
 void settime(void);
-void setalarm(void);
-void settemp(void);
-int timeout;
+int settime_pressed=0;
+int setalarm_pressed=0;
 //LCD Function Declarations
 
     void delayMs (uint32_t n);
@@ -32,25 +32,157 @@ int timeout;
     void readInput(char* string); // read input characters from INPUT_BUFFER that are valid
     void setupSerial(); // Sets up serial for use and enables interrupts
     void TA_init(void);
-uint8_t storage_location = 0;
-uint8_t read_location = 0;
+//ADC Function Declarations
+    void settemp(void);
+    void PortADC_init(void);
+    void ADC14_init(void);
+
+
     char INPUT_BUFFER[BUFFER_SIZE];
+    uint8_t storage_location = 0; // used in the interrupt to store new data
+    uint8_t read_location = 0; // used in the main application to read valid data that hasn't been read yet
+
+    char wordtime[] = "TIME";    //declaration of arrays
+    char seconds[60];
+    char minutes[60];
+    char hours[60];
+    int sec = 0;
+    int min = 0;
+    int hour = 1;
+    int secflag = 0;
+    int minflag = 0;
+    int hourflag = 0;
+//These flags will allow the program to determine if it only needs to print the ones digit
+//or if it needs to print both tens and ones digits for numbers greater than 10
+
 
 void main(void)
 {
+
     WDT_A->CTL = WDT_A_CTL_PW | WDT_A_CTL_HOLD;     // stop watchdog timer
+
+    P1 -> SEL1 &= ~BIT0;  // initialize red LED for button test
+    P1 -> SEL0 &= ~BIT0;
+    P1 -> DIR |= BIT0;
+    P1 -> OUT &= ~BIT0;
+
+    int i,j; //loop integers
+
     butt_init();
-//    SysTick_Init_interrupt();
-    PortADC_init();
-//    ADC14_init();
-    LCDinit();
+    SysTick_init();     //initialization of SysTick
+    LCDinit();            //initialization of LCD
+    delayMs(10);
+
+    TIMER32_1->LOAD = 3000000-1;
+    TIMER32_1->CONTROL = 0xC2; /* no prescaler, periodic wrapping mode, disable interrupt, 32-bit timer. */
+
     __enable_irq();                  /* global enable IRQs */
-    init_display_screen();
-    char string[10];
+
+   // init_display_screen();
     while(1)
     {
-        settemp();
-//        readInput(string); // Read the input up to \n, store in string.  This function doesn't return until \n is received
+            command(0x85);  /* set cursor at beginning of first line */
+                 for(j=0; j<4;j++)
+                 {
+                 data(wordtime[j]); //prints TIME to line 1
+                 }
+
+                 if(sec>=60)  //this section checks if the seconds should roll into a minute
+                 {
+                      sec = 0;
+                      seconds[0] = '0';
+                      seconds[1] = '0';
+                      secflag = 0;
+                      min = min + 1;
+                 }
+                 if(sec>=10)
+                 {
+                      secflag=1;
+                 }
+
+                 if(min>=60) //this section checks if minutes should roll into an hour
+                 {
+                     min = 0;
+                     minutes[0] = '0';
+                     minutes[1] = '0';
+                     minflag = 0;
+                     hour = hour +1;
+                 }
+                 if(min>=10)
+                 {
+                     minflag = 1;
+                 }
+
+                 if(hour > 12) //this section allows to change between AM and PM
+                 {
+                     hour = 1;
+                     hourflag = 0;
+                 }
+                 if(hour >= 10)
+                 {
+                     hourflag = 1;
+                 }
+
+                 //printing the clock time to the LCD
+                 command(0xC1);
+                 sprintf(hours,"%d", hour); //displaying hours
+                 if(hourflag == 0)
+                 {
+                     data(hours[0]);
+                 }
+
+                 else if(hourflag == 1)
+                 {
+                     for(i=0;i<2;i++)
+                     {
+                         data(hours[i]);
+                     }
+                 }
+
+                 command(0xC3);
+                 data(':');
+                 command(0xC4);
+                 sprintf(minutes, "%d", min); //displaying minutes
+                 if(minflag == 0)
+                 {
+                     data('0');
+                     command(0xC5);
+                     data(minutes[0]);
+                 }
+                 else if(minflag == 1)
+                 {
+                      for(i=0;i<2;i++)
+                      {
+                          data(minutes[i]);
+                      }
+                 }
+
+                 command(0xC7);
+                 data(':');
+                 command(0xC8);
+                 sprintf(seconds, "%d", sec); //displaying seconds
+                 if(secflag == 0)
+                 {
+                     data('0');
+                     command(0xC9);
+                     data(seconds[0]);
+                 }
+                 else if(secflag == 1)
+                 {
+                     for(i=0;i<2;i++)
+                     {
+                         data(seconds[i]);
+                     }
+                 }
+
+                 sec = sec + 1;
+
+                 while((TIMER32_1 -> RIS & 1) == 0); //waits 1 second until interrupt flag is set
+                 TIMER32_1 -> INTCLR = 0; //clears interrupt flag
+
+
+// main code serial input
+//readInput(string); // Read the input up to \n, store in string.  This function doesn't return until \n is received
 //        puts(string);
 //        if(string[0] != '\0') // if string is not empty, check the inputted data.
 //             {
@@ -73,131 +205,61 @@ void main(void)
 
 
 
+//------------- button interrupt functions -----------------
 
-void butt_init(void)
+void butt_init(void) //button initializations
 {
     /* configure P1.1, P1.4 for switch inputs */
-    P5->SEL1 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);    /* configure P5.0-5.6 skipping 5.3 as simple I/O */
+    P5->SEL1 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);    /* configure P1.1, P1.4 as simple I/O */
     P5->SEL0 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);
-    P5->DIR &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);     /* P5.0-5.6 skipping 5.3 set as input */
-    P5->REN |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* P5.0-5.6 skipping 5.3 pull resistor enabled */
-    P5->OUT |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* Pull up/down is selected by P5->OUT */
+    P5->DIR &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);     /* P1.1, P1.4 set as input */
+    P5->REN |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* P1.1, P1.4 pull resistor enabled */
+    P5->OUT |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* Pull up/down is selected by P1->OUT */
     P5->IES |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* make interrupt trigger on high-to-low transition */
     P5->IFG = 0;          /* clear pending interrupt flags */
-    P5->IE |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);       /* enable interrupt from P5.0-5.6 skipping 5.3 */
+    P5->IE |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);       /* enable interrupt from P1.1, P1.4 */
 
 
     NVIC_EnableIRQ(PORT5_IRQn);      /* enable interrupt in NVIC */
 
 }
-
-void PORT5_IRQHandler(void) {
+void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
+{
     int i;
 
     if(P5->IFG & BIT0)//SET TIME BUTTON
        {
-           settime();
+          // settime();
+           P1 -> OUT ^= BIT0;
        }
     if(P5->IFG & BIT1)//SET ALARM BUTTON
        {
-           setalarm();
+           //setalarm();
+        P1 -> OUT ^= BIT0;
        }
     if(P5->IFG & BIT2)//ON/OFF/UP BUTTON
        {
-
+        P1 -> OUT ^= BIT0;
        }
     if(P5->IFG & BIT4)//SNOOZE/DOWN
        {
-
+        P1 -> OUT ^= BIT0;
        }
     if(P5->IFG & BIT5)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
        {
-
+        P1 -> OUT ^= BIT0;
        }
     if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 MINUTE ALARM CLOCK TIME
        {
-
+        P1 -> OUT ^= BIT0;
        }
 
     P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6); /* clear the interrupt flag before return */
 }
-void settime(void)
-{
-    int i;
-
-}
-void setalarm(void)
-{
-    int i;
-}
-
-void settemp(void)
-{
-    int i;
-    char temp[]= "XX.X F";
-    float volt;
-    float mvolt;
-    float tempC;
-    float tempF;
-    int tempFint;
-    ADC14->CTL0 |= ADC14_CTL0_SC;    //starts conversion
-    while(!(ADC14->IFGR0));         //waits for it to complete
-    float result = ADC14->MEM[0];         //get value from the ADC
-    volt = (result*3.3)/16384;      //converts raw value to voltage
-
-           mvolt = volt*1000;        //converts volts to mV
-
-           tempC = (mvolt-500)/10;     //finds temp in Celsius
-           tempF = (tempC * 9);  //converts celsius to fahrenheit
-           tempF = (tempF/5);
-           tempF = (tempF + 32);
-           tempFint=tempF;
-           if(timeout)
-           {   //prints the RAW, converted, C and F values
-           printf("\t RAW = %f\n\tVOLTAGE = %f\n\tCelcius = %f \n\tFarenheit = %f\n\n", result, volt, tempC, tempF);
-           timeout = 0;  //clears interrupt flag
-           }
-           temp[0]=tempF/10;
-           temp[1]=tempFint-(temp[0]*10);
-           temp[3]=tempF-(temp[0]*10)-(temp[1]);
-           for(i=0;i<6;i++)
-                 {
-                     data(temp[i]);
-                 }
-}
-void PortADC_init(void)
-{
-    P5->SEL0 |= BIT7;   //sets pin 5.7 as A0 input
-    P5->SEL1 |= BIT7;
-}
- void ADC14_init(void)
- {
-     ADC14->CTL0 &= ~ADC14_CTL0_ENC;    //turns off ADC converter while initializing
-     ADC14->CTL0 |= 0x04200210;         //16 sample clocks, SMCLK, S/H pulse
-     ADC14->CTL1 =  0x00000030;         //14 bit resolution
-     ADC14->CTL1 |= 0x00000000;         //convert for mem0 register
-     ADC14->MCTL[0]=0x00000000;         //mem[0] to ADC14INCHx = 0
-     ADC14->CTL0 |= ADC14_CTL0_ENC;     //enables ADC14ENC and starts ADC after configuration
- }
-
-
-
-//void SysTick_Init_interrupt(void)
-//{
-//    SysTick -> CTRL = 0;            //turns off SysTick timer
-//    SysTick -> LOAD = 750000;   //Load top value
-//    SysTick -> VAL = 0;             //clears value on SysTick
-//    SysTick -> CTRL = 0x00000007;   //enables SysTick and interrupts
-//}
-
-//void SysTick_Handler(void)
-//{
-//   timeout = 1;
-//}
 
 //----------LCD functions----------------------
 
-void LCDinit(void)    //LCD info is in Lab 6 pt. 2 *************
+void LCDinit(void) //LCD info is in Lab 6 pt. 2 *************
 {
     P4->DIR = 0xFF;  //set all of pin 4 ports as output
     delayMs(30);
@@ -216,6 +278,245 @@ void LCDinit(void)    //LCD info is in Lab 6 pt. 2 *************
     command(0x0F);  //turn on blinking cursor
 
 }
+void nibblewrite(unsigned char data, unsigned char control)
+{
+    data &= 0xF0;         //takes bits and sends them to LCD used by data()
+    control &= 0x0F;
+    P4->OUT = data|control;
+    P4->OUT = data|control|EN;
+    delayMs(1);
+    P4-> OUT = data;
+    P4-> OUT = 0;
+}
+void command(unsigned char command)  //function to write commands to the LCD
+{
+    nibblewrite(command & 0xF0, 0);
+    nibblewrite(command << 4, 0);
+
+    if (command < 4)
+    { delayMs(4);
+    }
+    else
+    {
+        delayMs(1);
+
+    }
+}
+void data(unsigned char data)  //function to write data to the LCD
+{
+    nibblewrite(data & 0xF0, RS);
+    nibblewrite(data <<4 , RS);
+
+    delayMs(1);
+}
+void init_display_screen(void) //sets initial display of LCD
+{
+    int i;
+    char time[]= "HH:MM:SS XM";
+    char alarmstatus[]= "ALARM: ";
+    char alarmtime[]= "HH:MM XM";
+    char temperature[]= "XX.X F";
+    command(1);
+    command(0x80);
+    for(i=0;i<11;i++)
+    {
+       data(time[i]);
+    }
+    command(0xC0);
+    for(i=0;i<7;i++)
+    {
+       data(alarmstatus[i]);
+    }
+    command(0x90);
+    for(i=0;i<8;i++)
+    {
+       data(alarmtime[i]);
+    }
+    command(0xD0);
+    for(i=0;i<6;i++)
+    {
+       data(temperature[i]);
+    }
+}
+
+//-----------time functions -----------------
+
+void settime(void)//pin 5.2=On/Off/Up  5.4=Snooze/Down 5.0=Set Time
+{
+    int i=0;
+    while(i==0)
+    {
+
+
+    if (P5->OUT &=~ BIT2)
+    {
+        if(hour > 12) //this section allows to change between AM and PM
+          {
+              hour = 1;
+              hourflag = 0;
+          }
+        if(hour >= 10)
+          {
+              hourflag = 1;
+          }
+        hour=hour+1;
+        command(0xC1);
+        sprintf(hours,"%d", hour); //displaying hours
+                      if(hourflag == 0)
+                      {
+                          data(hours[0]);
+                      }
+
+                      else if(hourflag == 1)
+                      {
+                          for(i=0;i<2;i++)
+                          {
+                              data(hours[i]);
+                          }
+                      }
+
+    }
+    if (P5->OUT &=~ BIT4)
+       {
+           if(hour < 1) //this section allows to change between AM and PM
+                       {
+                           hour = 12;
+                           hourflag = 0;
+                       }
+           if(hour >= 10)
+             {
+                 hourflag = 1;
+             }
+           hour=hour-1;
+           command(0xC1);
+           sprintf(hours,"%d", hour); //displaying hours
+                         if(hourflag == 0)
+                         {
+                             data(hours[0]);
+                         }
+
+                         else if(hourflag == 1)
+                         {
+                             for(i=0;i<2;i++)
+                             {
+                                 data(hours[i]);
+                             }
+                         }
+
+       }
+    if(P5->OUT &=~ BIT0)
+    {
+        i++;
+    }
+    }
+   while(i==1)
+   {
+       if(min>=60) //this section checks if minutes should roll into an hour
+                        {
+                            min = 0;
+                            minutes[0] = '0';
+                            minutes[1] = '0';
+                            minflag = 0;
+                            hour = hour +1;
+                        }
+                        if(min>=10)
+                        {
+                            minflag = 1;
+                        }
+        command(0xC3);
+                   data(':');
+                   command(0xC4);
+                   sprintf(minutes, "%d", min); //displaying minutes
+                   if(minflag == 0)
+                   {
+                       data('0');
+                       command(0xC5);
+                       data(minutes[0]);
+                   }
+                   else if(minflag == 1)
+                   {
+                        for(i=0;i<2;i++)
+                        {
+                            data(minutes[i]);
+                        }
+                   }
+
+                   command(0xC7);
+       if(P5->OUT &=~ BIT0)
+           {
+               i++;
+           }
+   }
+}
+
+void setalarm(void)
+{
+    int i;
+}
+
+
+//-------------temp sensor functions-------------
+//void settemp(void)
+//{
+//    int i;
+//    char temp[]= "XX.X F";
+//    float volt;
+//    float mvolt;
+//    float tempC;
+//    float tempF;
+//    int tempFint;
+//    ADC14->CTL0 |= ADC14_CTL0_SC;    //starts conversion
+//    while(!(ADC14->IFGR0));         //waits for it to complete
+//    float result = ADC14->MEM[0];         //get value from the ADC
+//    volt = (result*3.3)/16384;      //converts raw value to voltage
+//
+//           mvolt = volt*1000;        //converts volts to mV
+//
+//           tempC = (mvolt-500)/10;     //finds temp in Celsius
+//           tempF = (tempC * 9);  //converts celsius to fahrenheit
+//           tempF = (tempF/5);
+//           tempF = (tempF + 32);
+//           tempFint=tempF;
+//           if(timeout)
+//           {   //prints the RAW, converted, C and F values
+//           printf("\t RAW = %f\n\tVOLTAGE = %f\n\tCelcius = %f \n\tFarenheit = %f\n\n", result, volt, tempC, tempF);
+//           timeout = 0;  //clears interrupt flag
+//           }
+//           temp[0]=tempF/10;
+//           temp[1]=tempFint-(temp[0]*10);
+//           temp[3]=tempF-(temp[0]*10)-(temp[1]);
+//           for(i=0;i<6;i++)
+//                 {
+//                     data(temp[i]);
+//                 }
+//}
+//void PortADC_init(void)
+//{
+//    P5->SEL0 |= BIT7;   //sets pin 5.7 as A0 input
+//    P5->SEL1 |= BIT7;
+//}
+// void ADC14_init(void)
+// {
+//     ADC14->CTL0 &= ~ADC14_CTL0_ENC;    //turns off ADC converter while initializing
+//     ADC14->CTL0 |= 0x04200210;         //16 sample clocks, SMCLK, S/H pulse
+//     ADC14->CTL1 =  0x00000030;         //14 bit resolution
+//     ADC14->CTL1 |= 0x00000000;         //convert for mem0 register
+//     ADC14->MCTL[0]=0x00000000;         //mem[0] to ADC14INCHx = 0
+//     ADC14->CTL0 |= ADC14_CTL0_ENC;     //enables ADC14ENC and starts ADC after configuration
+// }
+
+ //void SysTick_Init_interrupt(void)
+ //{
+ //    SysTick -> CTRL = 0;            //turns off SysTick timer
+ //    SysTick -> LOAD = 750000;   //Load top value
+ //    SysTick -> VAL = 0;             //clears value on SysTick
+ //    SysTick -> CTRL = 0x00000007;   //enables SysTick and interrupts
+ //}
+
+ //void SysTick_Handler(void)
+ //{
+ //   timeout = 1;
+ //}
 
 void SysTick_init(void)
 {
@@ -233,69 +534,6 @@ void delayMs(uint32_t n)  //setup the delay function
 
     }
 
-void nibblewrite(unsigned char data, unsigned char control)
-{
-    data &= 0xF0;         //takes bits and sends them to LCD used by data()
-    control &= 0x0F;
-    P4->OUT = data|control;
-    P4->OUT = data|control|EN;
-    delayMs(1);
-    P4-> OUT = data;
-    P4-> OUT = 0;
-}
-
-void command(unsigned char command)  //function to write commands to the LCD
-{
-    nibblewrite(command & 0xF0, 0);
-    nibblewrite(command << 4, 0);
-
-    if (command < 4)
-    {
-        delayMs(4);
-    }
-    else
-    {
-        delayMs(1);
-    }
-}
-
-void data(unsigned char data)  //function to write data to the LCD
-{
-    nibblewrite(data & 0xF0, RS);
-    nibblewrite(data <<4 , RS);
-
-    delayMs(1);
-}
-
-void init_display_screen(void)
-{
-    int i;
-    char time[]= "HH:MM:SS XM";
-    char alarmstatus[]= "ALARM: ";
-    char alarmtime[]= "HH:MM XM";
-    char temperature[]= "XX.X F";
-    command(1);
-    command(0x80);
-    for(i=0;i<10;i++)
-    {
-       data(time[i]);
-    }
-    command(0xC0);
-    for(i=0;i<8;i++)
-    {
-       data(alarmstatus[i]);
-    }
-    command(0x90);
-    for(i=0;i<8;i++)
-    {
-       data(alarmtime[i]);
-    }
-    command(0xD0);
-    for(i=0;i<6;i++)
-    {
-       data(temperature[i]);
-    }
-}
 //-------- UART functions --------------
 
 /*----------------------------------------------------------------
@@ -312,8 +550,7 @@ void writeOutput(char *string)
 {
     int i = 0;  // Location in the char array "string" that is being written to
 
-    while(string[i] != '\0')
-    {
+    while(string[i] != '\0') {
         EUSCI_A0->TXBUF = string[i];
         i++;
         while(!(EUSCI_A0->IFG & BIT1));
@@ -445,4 +682,3 @@ TIMER_A0 -> CCR[3] = 32000;
 TIMER_A0 -> CCTL[3] = TIMER_A_CCTLN_OUTMOD_7;
 
 }
-
