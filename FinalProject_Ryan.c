@@ -16,25 +16,29 @@ int settime_but = 0;
 int timeout;
 void butt_init(void);
 void settime(void);
+int settime_pressed=0;
+int setalarm_pressed=0;
 
 //LCD Function Declarations
-
     void delayMs (uint32_t n);
     void nibblewrite(unsigned char data, unsigned char control);
     void command(unsigned char command);
     void data(unsigned char data);
     void LCDinit(void);
-    void SysTick_init(void);
     void init_display_screen(void);
 //UART Function Declarations
     void writeOutput(char *string); // write output charactrs to the serial port
     void readInput(char* string); // read input characters from INPUT_BUFFER that are valid
     void setupSerial(); // Sets up serial for use and enables interrupts
     void TA_init(void);
-//ADC Function Declarations
+//ADC Function & temp sensor Declarations
+    void SysTick_Init_interrupt(void);
+    void SysTick_Handler(void);
     void settemp(void);
     void PortADC_init(void);
     void ADC14_init(void);
+
+
 
 
     char INPUT_BUFFER[BUFFER_SIZE];
@@ -68,7 +72,10 @@ void main(void)
     int i,j; //loop integers
 
     butt_init();
-    SysTick_init();     //initialization of SysTick
+    SysTick_Init_interrupt();     //initialization of SysTick with interrupt
+    PortADC_init();               //initialization of ADC Ports
+    ADC14_init();                 //initialization of ADC
+    NVIC->ISER[0] = 1 << ((ADC14_IRQn) & 31);   //enables ADC interrupt in  NVIC
     LCDinit();            //initialization of LCD
     delayMs(10);
 
@@ -80,6 +87,7 @@ void main(void)
    // init_display_screen();
     while(1)
     {
+            settemp();
             command(0x85);  /* set cursor at beginning of first line */
                  for(j=0; j<4;j++)
                  {
@@ -208,15 +216,15 @@ void main(void)
 
 void butt_init(void) //button initializations
 {
-    /* configure P1.1, P1.4 for switch inputs */
-    P5->SEL1 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);    /* configure P1.1, P1.4 as simple I/O */
-    P5->SEL0 &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);
-    P5->DIR &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);     /* P1.1, P1.4 set as input */
-    P5->REN |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* P1.1, P1.4 pull resistor enabled */
-    P5->OUT |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* Pull up/down is selected by P1->OUT */
-    P5->IES |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);      /* make interrupt trigger on high-to-low transition */
+    /* configure P5.0, P5.1 for switch inputs */
+    P5->SEL1 &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);    /* configure P1.1, P1.4 as simple I/O */
+    P5->SEL0 &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
+    P5->DIR &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);     /* P1.1, P1.4 set as input */
+    P5->REN |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);      /* P1.1, P1.4 pull resistor enabled */
+    P5->OUT |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);      /* Pull up/down is selected by P1->OUT */
+    P5->IES |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);      /* make interrupt trigger on high-to-low transition */
     P5->IFG = 0;          /* clear pending interrupt flags */
-    P5->IE |= (BIT0|BIT1|BIT2|BIT4|BIT5|BIT6);       /* enable interrupt from P1.1, P1.4 */
+    P5->IE |= (BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);       /* enable interrupt from P1.1, P1.4 */
 
 
     NVIC_EnableIRQ(PORT5_IRQn);      /* enable interrupt in NVIC */
@@ -228,12 +236,10 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
 
     if(P5->IFG & BIT0)//SET TIME BUTTON
        {
-          // settime();
            P1 -> OUT ^= BIT0;
        }
     if(P5->IFG & BIT1)//SET ALARM BUTTON
        {
-           //setalarm();
         P1 -> OUT ^= BIT0;
        }
     if(P5->IFG & BIT2)//ON/OFF/UP BUTTON
@@ -244,16 +250,16 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
        {
         P1 -> OUT ^= BIT0;
        }
-    if(P5->IFG & BIT5)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
+    if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
        {
         P1 -> OUT ^= BIT0;
        }
-    if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 MINUTE ALARM CLOCK TIME
+    if(P5->IFG & BIT7)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 MINUTE ALARM CLOCK TIME
        {
         P1 -> OUT ^= BIT0;
        }
 
-    P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT5|BIT6); /* clear the interrupt flag before return */
+    P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7); /* clear the interrupt flag before return */
 }
 
 //----------LCD functions----------------------
@@ -261,15 +267,15 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
 void LCDinit(void) //LCD info is in Lab 6 pt. 2 *************
 {
     P4->DIR = 0xFF;  //set all of pin 4 ports as output
-    delayMs(30);
+    __delay_cycles(30000); //using delay cycles here because we want to use the SysTick for the Temp Sensor interrupt
     nibblewrite(0x30, 0);    //reset the LCD 3
-    delayMs(10);
+    __delay_cycles(30000);
     nibblewrite(0x30, 0);    //reset the LCD 3
-    delayMs(10);
+    __delay_cycles(30000);
     nibblewrite(0x30, 0);    //reset the LCD 3
-    delayMs(10);
+    __delay_cycles(30000);
     nibblewrite(0x20, 0);    //set cursor HOME
-    delayMs(10);
+    __delay_cycles(30000);
 
     command(0x28);  //4-bit interface
     command(0x06);  // move cursor right
@@ -340,11 +346,114 @@ void init_display_screen(void) //sets initial display of LCD
 
 //-----------time functions -----------------
 
-void settime(void)
+void settime(void)//pin 5.2=On/Off/Up  5.4=Snooze/Down 5.0=Set Time
 {
-    int i;
+    int i=0;
+    while(i==0)
+    {
 
+
+    if (P5->OUT &=~ BIT2)
+    {
+        if(hour > 12) //this section allows to change between AM and PM
+          {
+              hour = 1;
+              hourflag = 0;
+          }
+        if(hour >= 10)
+          {
+              hourflag = 1;
+          }
+        hour=hour+1;
+        command(0xC1);
+        sprintf(hours,"%d", hour); //displaying hours
+                      if(hourflag == 0)
+                      {
+                          data(hours[0]);
+                      }
+
+                      else if(hourflag == 1)
+                      {
+                          for(i=0;i<2;i++)
+                          {
+                              data(hours[i]);
+                          }
+                      }
+
+    }
+    if (P5->OUT &=~ BIT4)
+       {
+           if(hour < 1) //this section allows to change between AM and PM
+                       {
+                           hour = 12;
+                           hourflag = 0;
+                       }
+           if(hour >= 10)
+             {
+                 hourflag = 1;
+             }
+           hour=hour-1;
+           command(0xC1);
+           sprintf(hours,"%d", hour); //displaying hours
+                         if(hourflag == 0)
+                         {
+                             data(hours[0]);
+                         }
+
+                         else if(hourflag == 1)
+                         {
+                             for(i=0;i<2;i++)
+                             {
+                                 data(hours[i]);
+                             }
+                         }
+
+       }
+    if(P5->OUT &=~ BIT0)
+    {
+        i++;
+    }
+    }
+   while(i==1)
+   {
+       if(min>=60) //this section checks if minutes should roll into an hour
+                        {
+                            min = 0;
+                            minutes[0] = '0';
+                            minutes[1] = '0';
+                            minflag = 0;
+                            hour = hour +1;
+                        }
+                        if(min>=10)
+                        {
+                            minflag = 1;
+                        }
+        command(0xC3);
+                   data(':');
+                   command(0xC4);
+                   sprintf(minutes, "%d", min); //displaying minutes
+                   if(minflag == 0)
+                   {
+                       data('0');
+                       command(0xC5);
+                       data(minutes[0]);
+                   }
+                   else if(minflag == 1)
+                   {
+                        for(i=0;i<2;i++)
+                        {
+                            data(minutes[i]);
+                        }
+                   }
+
+                   command(0xC7);
+       if(P5->OUT &=~ BIT0)
+           {
+               i++;
+           }
+   }
 }
+
 void setalarm(void)
 {
     int i;
@@ -352,75 +461,73 @@ void setalarm(void)
 
 
 //-------------temp sensor functions-------------
-//void settemp(void)
-//{
-//    int i;
-//    char temp[]= "XX.X F";
-//    float volt;
-//    float mvolt;
-//    float tempC;
-//    float tempF;
-//    int tempFint;
-//    ADC14->CTL0 |= ADC14_CTL0_SC;    //starts conversion
-//    while(!(ADC14->IFGR0));         //waits for it to complete
-//    float result = ADC14->MEM[0];         //get value from the ADC
-//    volt = (result*3.3)/16384;      //converts raw value to voltage
-//
-//           mvolt = volt*1000;        //converts volts to mV
-//
-//           tempC = (mvolt-500)/10;     //finds temp in Celsius
-//           tempF = (tempC * 9);  //converts celsius to fahrenheit
-//           tempF = (tempF/5);
-//           tempF = (tempF + 32);
-//           tempFint=tempF;
-//           if(timeout)
-//           {   //prints the RAW, converted, C and F values
-//           printf("\t RAW = %f\n\tVOLTAGE = %f\n\tCelcius = %f \n\tFarenheit = %f\n\n", result, volt, tempC, tempF);
-//           timeout = 0;  //clears interrupt flag
-//           }
-//           temp[0]=tempF/10;
-//           temp[1]=tempFint-(temp[0]*10);
-//           temp[3]=tempF-(temp[0]*10)-(temp[1]);
-//           for(i=0;i<6;i++)
-//                 {
-//                     data(temp[i]);
-//                 }
-//}
-//void PortADC_init(void)
-//{
-//    P5->SEL0 |= BIT7;   //sets pin 5.7 as A0 input
-//    P5->SEL1 |= BIT7;
-//}
-// void ADC14_init(void)
-// {
-//     ADC14->CTL0 &= ~ADC14_CTL0_ENC;    //turns off ADC converter while initializing
-//     ADC14->CTL0 |= 0x04200210;         //16 sample clocks, SMCLK, S/H pulse
-//     ADC14->CTL1 =  0x00000030;         //14 bit resolution
-//     ADC14->CTL1 |= 0x00000000;         //convert for mem0 register
-//     ADC14->MCTL[0]=0x00000000;         //mem[0] to ADC14INCHx = 0
-//     ADC14->CTL0 |= ADC14_CTL0_ENC;     //enables ADC14ENC and starts ADC after configuration
-// }
-
- //void SysTick_Init_interrupt(void)
- //{
- //    SysTick -> CTRL = 0;            //turns off SysTick timer
- //    SysTick -> LOAD = 750000;   //Load top value
- //    SysTick -> VAL = 0;             //clears value on SysTick
- //    SysTick -> CTRL = 0x00000007;   //enables SysTick and interrupts
- //}
-
- //void SysTick_Handler(void)
- //{
- //   timeout = 1;
- //}
-
-void SysTick_init(void)
+void settemp(void)
 {
-    SysTick -> CTRL = 0;          //initializes systick
-    SysTick -> LOAD = 0X00FFFFFF;
-    SysTick -> VAL = 0;
-    SysTick -> CTRL = 0x00000005;
+    int i;
+    char fer[100];
+    char temp[]= "TEMP is XX.X F";
+    float volt;
+    float mvolt;
+    float tempC;
+    float tempF;
+    int tempFint;
+    ADC14->CTL0 |= ADC14_CTL0_SC;    //starts conversion
+    while(!(ADC14->IFGR0));         //waits for it to complete
+    float result = ADC14->MEM[0];         //get value from the ADC
+    volt = (result*3.3)/16384;      //converts raw value to voltage
+
+           mvolt = volt*1000;        //converts volts to mV
+
+           tempC = (mvolt-500)/10;     //finds temp in Celsius
+           tempF = (tempC * 9);  //converts celsius to fahrenheit
+           tempF = (tempF/5);
+           tempF = (tempF + 32);
+           tempFint=tempF;
+           if(timeout)
+           {   //prints the RAW, converted, C and F values
+           printf("\t RAW = %f\n\tVOLTAGE = %f\n\tCelcius = %f \n\tFarenheit = %f\n\n", result, volt, tempC, tempF);
+           timeout = 0;  //clears interrupt flag
+           }
+
+
+           temp[8]=tempF/10;
+           temp[9]=tempFint-(temp[0]*10);
+           temp[11]=tempF-(temp[0]*10)-(temp[1]);
+
+           command(0x90);
+           for(i=0;i<14;i++)
+           {
+               data(temp[i]);
+           }
+
 }
+void PortADC_init(void)
+{
+    P5->SEL0 |= BIT5;   //sets pin 5.5 as A0 input
+    P5->SEL1 |= BIT5;
+}
+ void ADC14_init(void)
+ {
+     ADC14->CTL0 &= ~ADC14_CTL0_ENC;    //turns off ADC converter while initializing
+     ADC14->CTL0 |= 0x04200210;         //16 sample clocks, SMCLK, S/H pulse
+     ADC14->CTL1 =  0x00000030;         //14 bit resolution
+     ADC14->CTL1 |= 0x00000000;         //convert for mem0 register
+     ADC14->MCTL[0]=0x00000000;         //mem[0] to ADC14INCHx = 0
+     ADC14->CTL0 |= ADC14_CTL0_ENC;     //enables ADC14ENC and starts ADC after configuration
+ }
+
+ void SysTick_Init_interrupt(void)
+ {
+     SysTick -> CTRL = 0;            //turns off SysTick timer
+     SysTick -> LOAD = 750000;   //Load top value
+     SysTick -> VAL = 0;             //clears value on SysTick
+     SysTick -> CTRL = 0x00000007;   //enables SysTick and interrupts
+ }
+
+ void SysTick_Handler(void)
+ {
+    timeout = 1;
+ }
 
 void delayMs(uint32_t n)  //setup the delay function
 {
