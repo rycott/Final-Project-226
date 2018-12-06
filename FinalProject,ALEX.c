@@ -43,6 +43,7 @@ int alarm_status=0;
     char INPUT_BUFFER[BUFFER_SIZE];
     uint8_t storage_location = 0; // used in the interrupt to store new data
     uint8_t read_location = 0; // used in the main application to read valid data that hasn't been read yet
+    char snoozebut[] = "SNOOZE";
     char alarmstatusoff[] = "ALARM OFF";
     char alarmstatuson[] = "ALARM  ON";
     char wordtime[] = "TIME";    //declaration of arrays
@@ -63,7 +64,7 @@ int alarm_status=0;
     char alarmminutes[60];
     char alarmhours[60];
     int  alarmsec = 0;
-    int  alarmmin = 0;
+    int  alarmmin = 2;
     int  alarmhour = 1;
     int  alarmsecflag = 0;
     int  alarmminflag = 0;
@@ -350,9 +351,22 @@ else
                               }
 
                  sec = sec + 1;
-if(hour&alarmhour && min&alarmmin && alarmamflag&amflag && alarmpmflag&pmflag && (alarm_status==1))
+if(alarmhour==hour)
 {
-    alarmgooff();
+    if(alarmmin==min)
+    {
+        if(alarm_status==1)
+        {
+            if((alarmamflag==amflag) | (alarmpmflag==pmflag))
+            {
+                snooze=0;
+                alarmgooff();
+                command(0x97);
+                data(blank[0]);
+            }
+        }
+    }
+
 }
                  while((TIMER32_1 -> RIS & 1) == 0); //waits 1 second until interrupt flag is set
                  TIMER32_1 -> INTCLR = 0; //clears interrupt flag
@@ -822,6 +836,12 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
     if(P5->IFG & BIT4)//SNOOZE/DOWN BLUE
        {
         snooze=1;
+        command(0x96);
+        for(i=0;i<6;i++)
+        {
+            data(snoozebut[i]);
+        }
+        alarmmin=min+10;
         P5->IFG &= ~(BIT0|BIT1|BIT2|BIT6|BIT7);
        }
     if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
@@ -1165,7 +1185,7 @@ void noisesetup(void)
         TIMER_A2->CCR[0] = 999;  //1000 clocks = 0.333 ms.  This is the period of everything on Timer A0.  0.333 < 16.666 ms so the on/off shouldn't
                                  //be visible with the human eye.  1000 makes easy math to calculate duty cycle.  No particular reason to use 1000.
         TIMER_A2->CCTL[4] = 0b0000000011100000;//using P6.7 which is TimerA2.4
-        TIMER_A2->CCR[4]=0;
+        TIMER_A2->CCR[4]= 0;
         //The next line turns on all of Timer A2.  None of the above will do anything until Timer A2 is started.
         TIMER_A2->CTL = 0b0000001000010100;  //up mode, smclk, taclr to load.  Up mode configuration turns on the output when CCR[1] is reached
                                              //and off when CCR[0] is reached. SMCLK is the master clock at 3,000,000 MHz.  TACLR must be set to load
@@ -1175,7 +1195,7 @@ void alarmgooff(void)
 {
     while(snooze==0)
     {
-    TIMER_A2->CCR[4]=999;
+    TIMER_A2->CCR[4]=499;
     __delay_cycles(150000);
     TIMER_A2->CCR[4]=0;
     __delay_cycles(150000);
