@@ -15,8 +15,8 @@
 int timeout;
 void butt_init(void);
 void settime(void);
-void alarm_on_off(void);
 void noisesetup(void);
+void alarmgooff(void);
 int settime_pressed=0;
 int setalarm_pressed=0;
 int alarm_status=0;
@@ -43,8 +43,13 @@ int alarm_status=0;
     char INPUT_BUFFER[BUFFER_SIZE];
     uint8_t storage_location = 0; // used in the interrupt to store new data
     uint8_t read_location = 0; // used in the main application to read valid data that hasn't been read yet
-
+    char alarmstatusoff[] = "ALARM OFF";
+    char alarmstatuson[] = "ALARM  ON";
     char wordtime[] = "TIME";    //declaration of arrays
+    char alarmtime[] = "ALARM";
+    char am[] = "AM";
+    char pm[] = "PM";
+    char blank[] = " ";
     char seconds[60];
     char minutes[60];
     char hours[60];
@@ -54,6 +59,20 @@ int alarm_status=0;
     int secflag = 0;
     int minflag = 0;
     int hourflag = 0;
+    char alarmseconds[60];
+    char alarmminutes[60];
+    char alarmhours[60];
+    int  alarmsec = 0;
+    int  alarmmin = 0;
+    int  alarmhour = 1;
+    int  alarmsecflag = 0;
+    int  alarmminflag = 0;
+    int  alarmhourflag = 0;
+    int  amflag=1;
+    int  pmflag=0;
+    int  alarmamflag=1;
+    int alarmpmflag=0;
+    int snooze=0;
 //These flags will allow the program to determine if it only needs to print the ones digit
 //or if it needs to print both tens and ones digits for numbers greater than 10
 
@@ -87,7 +106,7 @@ void main(void)
     while(1)
     {
         settemp();
-            command(0x85);  /* set cursor at beginning of first line */
+            command(0x80);  /* set cursor at beginning of first line */
                  for(j=0; j<4;j++)
                  {
                  data(wordtime[j]); //prints TIME to line 1
@@ -123,6 +142,8 @@ void main(void)
                  {
                      hour = 1;
                      hourflag = 0;
+                     pmflag=1;
+
                  }
                  if(hour >= 10)
                  {
@@ -130,7 +151,7 @@ void main(void)
                  }
 
                  //printing the clock time to the LCD
-                 command(0x91);
+                 command(0x85);
                  sprintf(hours,"%d", hour); //displaying hours
                  if(hourflag == 0)
                  {
@@ -145,14 +166,14 @@ void main(void)
                      }
                  }
 
-                 command(0x93);
+                 command(0x87);
                  data(':');
-                 command(0x94);
+                 command(0x88);
                  sprintf(minutes, "%d", min); //displaying minutes
                  if(minflag == 0)
                  {
                      data('0');
-                     command(0x95);
+                     command(0x89);
                      data(minutes[0]);
                  }
                  else if(minflag == 1)
@@ -163,14 +184,14 @@ void main(void)
                       }
                  }
 
-                 command(0x97);
+                 command(0x8A);
                  data(':');
-                 command(0x98);
+                 command(0x8B);
                  sprintf(seconds, "%d", sec); //displaying seconds
                  if(secflag == 0)
                  {
                      data('0');
-                     command(0x99);
+                     command(0x8C);
                      data(seconds[0]);
                  }
                  else if(secflag == 1)
@@ -180,9 +201,159 @@ void main(void)
                          data(seconds[i]);
                      }
                  }
+ if (amflag==1)
+             {
+                 command(0x8E);
+                 for(i=0;i<2;i++)
+                 {
+                     data(am[i]);
+                 }
+                 pmflag=0;
+             }
+ if (pmflag==1)
+             {
+                 command(0x8E);
+                 for(i=0;i<2;i++)
+                 {
+                     data(pm[i]);
+                 }
+                 amflag=0;
+             }
+ if(alarm_status==0)
+         {
+
+             command(0xC0);
+             for(i=0;i<9;i++)
+                {
+                   data(alarmstatusoff[i]);
+                }
+         }
+else
+         {
+
+             command(0xC0);
+             for(i=0;i<9;i++)
+                {
+                   data(alarmstatuson[i]);
+                }
+         }
+                 command(0x90);  /* set cursor at beginning of first line */
+                 for(j=0; j<5;j++)
+                 {
+                 data(alarmtime[j]); //prints TIME to line 1
+                 }
+                 if(alarmsec>=60)  //this section checks if the seconds should roll into a minute
+                        {
+                             alarmsec = 0;
+                             alarmseconds[0] = '0';
+                             alarmseconds[1] = '0';
+                             alarmsecflag = 0;
+                             alarmmin = alarmmin + 1;
+                        }
+                        if(alarmsec>=10)
+                        {
+                             alarmsecflag=1;
+                        }
+
+                        if(alarmmin>=60) //this section checks if minutes should roll into an hour
+                        {
+                            alarmmin = 0;
+                            alarmminutes[0] = '0';
+                            alarmminutes[1] = '0';
+                            alarmminflag = 0;
+                            alarmhour = alarmhour +1;
+                        }
+                        if(alarmmin>=10)
+                        {
+                            alarmminflag = 1;
+                        }
+
+                        if(hour > 12) //this section allows to change between AM and PM
+                        {
+                            alarmhour = 1;
+                            alarmhourflag = 0;
+                            alarmpmflag=1;
+
+                        }
+                        if(alarmhour >= 10)
+                        {
+                            alarmhourflag = 1;
+                        }
+                 //printing the clock time to the LCD
+                 command(0x96);
+                 sprintf(alarmhours,"%d", alarmhour); //displaying hours
+                 if(alarmhourflag == 0)
+                 {
+                     data(alarmhours[0]);
+                 }
+
+                 else if(alarmhourflag == 1)
+                 {
+                     for(i=0;i<2;i++)
+                     {
+                         data(alarmhours[i]);
+                     }
+                 }
+
+                 command(0x98);
+                 data(':');
+                 command(0x99);
+                 sprintf(alarmminutes, "%d", alarmmin); //displaying minutes
+                 if(alarmminflag == 0)
+                 {
+                     data('0');
+                     command(0x9A);
+                     data(alarmminutes[0]);
+                 }
+                 else if(alarmminflag == 1)
+                 {
+                      for(i=0;i<2;i++)
+                      {
+                          data(alarmminutes[i]);
+                      }
+                 }
+
+                 command(0x9B);
+                 data(':');
+                 command(0x9C);
+                 sprintf(alarmseconds, "%d", alarmsec); //displaying seconds
+                 if(alarmsecflag == 0)
+                 {
+                     data('0');
+                     command(0x9C);
+                     data(alarmseconds[0]);
+                 }
+                 else if(alarmsecflag == 1)
+                 {
+                     for(i=0;i<2;i++)
+                     {
+                         data(alarmseconds[i]);
+                     }
+                 }
+                 if (alarmamflag==1)
+                              {
+                                  command(0x9E);
+                                  for(i=0;i<2;i++)
+                                  {
+                                      data(am[i]);
+                                  }
+                                  alarmpmflag=0;
+                              }
+                  if (alarmpmflag==1)
+                              {
+                                  command(0x9E);
+                                  for(i=0;i<2;i++)
+                                  {
+                                      data(pm[i]);
+                                  }
+                                  alarmamflag=0;
+                              }
 
                  sec = sec + 1;
-
+if(hour&alarmhour && min&alarmmin && alarmamflag&amflag && alarmpmflag&pmflag && (alarm_status==1))
+{
+    alarmgooff();
+}
                  while((TIMER32_1 -> RIS & 1) == 0); //waits 1 second until interrupt flag is set
                  TIMER32_1 -> INTCLR = 0; //clears interrupt flag
 
@@ -237,7 +408,7 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
        {
         P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
         settime_pressed++;
-           //settime();
+
         int i;
            while(settime_pressed==1)
            {
@@ -246,22 +417,46 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
            if (P5->IFG & BIT2)
            {
                P5->IFG &= ~BIT2;
+               hour=hour+1;
                if(hour > 12) //this section allows to change between AM and PM
                  {
                      hour = 1;
                      hourflag = 0;
+                     amflag=0;
+                     pmflag=1;
 
                  }
                if(hour >= 10)
                  {
                      hourflag = 1;
                  }
-               hour=hour+1;
-               command(0xC1);
+               if (amflag==1)
+                            {
+                                command(0x8E);
+                                for(i=0;i<2;i++)
+                                {
+                                    data(am[i]);
+                                }
+                                pmflag=0;
+                            }
+                if (pmflag==1)
+                            {
+                                command(0x8E);
+                                for(i=0;i<2;i++)
+                                {
+                                    data(pm[i]);
+                                }
+                                amflag=0;
+                            }
+
+               command(0x85);
                sprintf(hours,"%d", hour); //displaying hours
                              if(hourflag == 0)
                              {
                                  data(hours[0]);
+                              command(0x86);
+                              data(blank[0]);
+
                              }
 
                              else if(hourflag == 1)
@@ -276,21 +471,44 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
            if (P5->IFG & BIT4)
               {
                P5->IFG &= ~BIT4;
+                   hour=hour-1;
                   if(hour < 1) //this section allows to change between AM and PM
                               {
                                   hour = 12;
                                   hourflag = 0;
+                                  amflag=0;
+                                  pmflag=1;
                               }
                   if(hour >= 10)
                     {
                         hourflag = 1;
                     }
-                  hour=hour-1;
-                  command(0xC1);
+                  if (amflag==1)
+                               {
+                                   command(0x8E);
+                                   for(i=0;i<2;i++)
+                                   {
+                                       data(am[i]);
+                                   }
+                                   pmflag=0;
+                               }
+                   if (pmflag==1)
+                               {
+                                   command(0x8E);
+                                   for(i=0;i<2;i++)
+                                   {
+                                       data(pm[i]);
+                                   }
+                                   amflag=0;
+                               }
+
+                  command(0x85);
                   sprintf(hours,"%d", hour); //displaying hours
                                 if(hourflag == 0)
                                 {
                                     data(hours[0]);
+                                    command(0x86);
+                                    data(blank[0]);
                                 }
 
                                 else if(hourflag == 1)
@@ -326,14 +544,14 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                {
                                    minflag = 1;
                                }
-                          command(0xC3);
+                          command(0x87);
                           data(':');
-                          command(0xC4);
+                          command(0x88);
                           sprintf(minutes, "%d", min); //displaying minutes
                           if(minflag == 0)
                           {
                               data('0');
-                              command(0xC5);
+                              command(0x89);
                               data(minutes[0]);
                           }
                           else if(minflag == 1)
@@ -360,14 +578,14 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                              {
                                                  minflag = 1;
                                              }
-                                        command(0xC3);
+                                        command(0x87);
                                         data(':');
-                                        command(0xC4);
+                                        command(0x88);
                                         sprintf(minutes, "%d", min); //displaying minutes
                                         if(minflag == 0)
                                         {
                                             data('0');
-                                            command(0xC5);
+                                            command(0x89);
                                             data(minutes[0]);
                                         }
                                         else if(minflag == 1)
@@ -378,31 +596,232 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                              }
                                         }
                                          }
-                          command(0xC7);
+                          command(0x8A);
               if(P5->IFG & BIT0)
                   {
                       P5->IFG &= ~BIT0;
                       settime_pressed=0;
                   }
           }
-
+           P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
 
        }
     if(P5->IFG & BIT1)//SET ALARM BUTTON GREEN
        {
-           //setalarm();
+        P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
+          setalarm_pressed++;
 
-        P5->IFG &= ~(BIT0|BIT2|BIT4|BIT6|BIT7);
+          int i;
+             while(setalarm_pressed==1)
+             {
+
+
+             if (P5->IFG & BIT2)
+             {
+                 P5->IFG &= ~BIT2;
+                 alarmhour=alarmhour+1;
+                 if(alarmhour > 12) //this section allows to change between AM and PM
+                   {
+                       alarmhour = 1;
+                       alarmhourflag = 0;
+                       alarmamflag=1;
+                       alarmpmflag=0;
+
+                   }
+                 if(alarmhour >= 10)
+                   {
+                       alarmhourflag = 1;
+                   }
+
+                 command(0x96);
+                 sprintf(alarmhours,"%d", alarmhour); //displaying hours
+                               if(alarmhourflag == 0)
+                               {
+                                   data(alarmhours[0]);
+                                   command(0x97);
+                                   data(blank[0]);
+                               }
+
+                               else if(alarmhourflag == 1)
+                               {
+                                   for(i=0;i<2;i++)
+                                   {
+                                       data(alarmhours[i]);
+                                   }
+                               }
+                               if (alarmamflag==1)
+                                           {
+                                               command(0x9E);
+                                               for(i=0;i<2;i++)
+                                               {
+                                                   data(am[i]);
+                                               }
+                                               alarmpmflag=0;
+                                           }
+                               if (alarmpmflag==1)
+                                           {
+                                               command(0x9E);
+                                               for(i=0;i<2;i++)
+                                               {
+                                                   data(pm[i]);
+                                               }
+                                               alarmamflag=0;
+                                           }
+
+             }
+             if (P5->IFG & BIT4)
+                {
+                 P5->IFG &= ~BIT4;
+                 alarmhour=alarmhour-1;
+                    if(alarmhour < 1) //this section allows to change between AM and PM
+                                {
+                                    alarmhour = 12;
+                                    alarmhourflag = 0;
+                                    alarmamflag=0;
+                                    alarmpmflag=1;
+                                }
+                    if(alarmhour >= 10)
+                      {
+                          alarmhourflag = 1;
+                      }
+                    if (alarmamflag==1)
+                                  {
+                                      command(0x9E);
+                                      for(i=0;i<2;i++)
+                                      {
+                                          data(am[i]);
+                                      }
+                                      alarmpmflag=0;
+                                  }
+                      if (alarmpmflag==1)
+                                  {
+                                      command(0x9E);
+                                      for(i=0;i<2;i++)
+                                      {
+                                          data(pm[i]);
+                                      }
+                                      alarmamflag=0;
+                                  }
+
+                    command(0x96);
+                    sprintf(alarmhours,"%d", alarmhour); //displaying hours
+                                  if(alarmhourflag == 0)
+                                  {
+                                      data(alarmhours[0]);
+                                      command(0x97);
+                                      data(blank[0]);
+                                  }
+
+                                  else if(alarmhourflag == 1)
+                                  {
+                                      for(i=0;i<2;i++)
+                                      {
+                                          data(alarmhours[i]);
+                                      }
+                                  }
+
+                }
+             if(P5->IFG & BIT1)
+             {
+                 P5->IFG &= ~BIT1;
+                 setalarm_pressed++;
+             }
+             }
+            while(setalarm_pressed==2)
+            {
+                if (P5->IFG & BIT2)
+                             {
+                              P5->IFG &= ~BIT2;
+                              alarmmin++;
+                if(alarmmin>=60) //this section checks if minutes should roll into an hour
+                                 {
+                                     alarmmin = 0;
+                                     alarmminutes[0] = '0';
+                                     alarmminutes[1] = '0';
+                                     alarmminflag = 0;
+                                     alarmhour = alarmhour +1;
+                                 }
+                                 if(min>=10)
+                                 {
+                                     alarmminflag = 1;
+                                 }
+                            command(0x98);
+                            data(':');
+                            command(0x99);
+                            sprintf(alarmminutes, "%d", alarmmin); //displaying minutes
+                            if(alarmminflag == 0)
+                            {
+                                data('0');
+                                command(0x9A);
+                                data(alarmminutes[0]);
+                            }
+                            else if(alarmminflag == 1)
+                            {
+                                 for(i=0;i<2;i++)
+                                 {
+                                     data(alarmminutes[i]);
+                                 }
+                            }
+                             }
+                if (P5->IFG & BIT4)
+                                           {
+                                            P5->IFG &= ~BIT4;
+                                            alarmmin=alarmmin-1;
+                              if(alarmmin>=60) //this section checks if minutes should roll into an hour
+                                               {
+                                                   alarmmin = 0;
+                                                   alarmminutes[0] = '0';
+                                                   alarmminutes[1] = '0';
+                                                   alarmminflag = 0;
+                                                   alarmhour = alarmhour +1;
+                                               }
+                                               if(min>=10)
+                                               {
+                                                   alarmminflag = 1;
+                                               }
+                                          command(0x98);
+                                          data(':');
+                                          command(0x99);
+                                          sprintf(alarmminutes, "%d", alarmmin); //displaying minutes
+                                          if(alarmminflag == 0)
+                                          {
+                                              data('0');
+                                              command(0x9A);
+                                              data(alarmminutes[0]);
+                                          }
+                                          else if(alarmminflag == 1)
+                                          {
+                                               for(i=0;i<2;i++)
+                                               {
+                                                   data(alarmminutes[i]);
+                                               }
+                                          }
+                                           }
+                            command(0x8C);
+                if(P5->IFG & BIT1)
+                    {
+                        P5->IFG &= ~BIT1;
+                        setalarm_pressed=0;
+                    }
+            }
+
+        P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6|BIT7);
        }
     if(P5->IFG & BIT2)//ON/OFF/UP BUTTON RED
        {
-
-        alarm_on_off();
+        if(alarm_status==0)
+                {
+                    alarm_status= 1;
+                }
+                else
+                {
+                    alarm_status= 0;
+                }
         P5->IFG &= ~(BIT0|BIT1|BIT4|BIT6|BIT7);
        }
     if(P5->IFG & BIT4)//SNOOZE/DOWN BLUE
        {
-
+        snooze=1;
         P5->IFG &= ~(BIT0|BIT1|BIT2|BIT6|BIT7);
        }
     if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
@@ -458,12 +877,12 @@ void command(unsigned char command)  //function to write commands to the LCD
     nibblewrite(command << 4, 0);
 
     if (command < 4)
-    { __delay_cycles(12000);
+    {
+        __delay_cycles(12000);
     }
     else
     {
         __delay_cycles(3000);
-
     }
 }
 void data(unsigned char data)  //function to write data to the LCD
@@ -505,144 +924,6 @@ void init_display_screen(void) //sets initial display of LCD
 
 //-----------time functions -----------------
 
-void settime(void)//pin 5.2=On/Off/Up  5.4=Snooze/Down 5.0=Set Time
-{
-    int i;
-    while(settime_pressed==1)
-    {
-
-
-    if (P5->OUT &=~ BIT2)
-    {
-        if(hour > 12) //this section allows to change between AM and PM
-          {
-              hour = 1;
-              hourflag = 0;
-
-          }
-        if(hour >= 10)
-          {
-              hourflag = 1;
-          }
-        hour=hour+1;
-        command(0xC1);
-        sprintf(hours,"%d", hour); //displaying hours
-                      if(hourflag == 0)
-                      {
-                          data(hours[0]);
-                      }
-
-                      else if(hourflag == 1)
-                      {
-                          for(i=0;i<2;i++)
-                          {
-                              data(hours[i]);
-                          }
-                      }
-
-    }
-    if (P5->OUT &=~ BIT4)
-       {
-           if(hour < 1) //this section allows to change between AM and PM
-                       {
-                           hour = 12;
-                           hourflag = 0;
-                       }
-           if(hour >= 10)
-             {
-                 hourflag = 1;
-             }
-           hour=hour-1;
-           command(0xC1);
-           sprintf(hours,"%d", hour); //displaying hours
-                         if(hourflag == 0)
-                         {
-                             data(hours[0]);
-                         }
-
-                         else if(hourflag == 1)
-                         {
-                             for(i=0;i<2;i++)
-                             {
-                                 data(hours[i]);
-                             }
-                         }
-
-       }
-    if(P5->OUT &=~ BIT0)
-    {
-        settime_pressed++;
-    }
-    }
-   while(settime_pressed==2)
-   {
-       if(min>=60) //this section checks if minutes should roll into an hour
-                        {
-                            min = 0;
-                            minutes[0] = '0';
-                            minutes[1] = '0';
-                            minflag = 0;
-                            hour = hour +1;
-                        }
-                        if(min>=10)
-                        {
-                            minflag = 1;
-                        }
-                   command(0xC3);
-                   data(':');
-                   command(0xC4);
-                   sprintf(minutes, "%d", min); //displaying minutes
-                   if(minflag == 0)
-                   {
-                       data('0');
-                       command(0xC5);
-                       data(minutes[0]);
-                   }
-                   else if(minflag == 1)
-                   {
-                        for(i=0;i<2;i++)
-                        {
-                            data(minutes[i]);
-                        }
-                   }
-
-                   command(0xC7);
-       if(P5->OUT &=~ BIT0)
-           {
-               settime_pressed=0;
-           }
-   }
-}
-
-void setalarm(void)
-{
-    int i;
-}
-
-void alarm_on_off (void)
-{
-    char alarmstatusoff[] = "ALARM OFF";
-    char alarmstatuson[] = "ALARM  ON";
-    int i;
-    if(alarm_status==0)
-        {
-            alarm_status= 1;
-            command(0xC0);
-            for(i=0;i<9;i++)
-               {
-                  data(alarmstatusoff[i]);
-               }
-        }
-        else
-        {
-            alarm_status= 0;
-            command(0xC0);
-            for(i=0;i<9;i++)
-               {
-                  data(alarmstatuson[i]);
-               }
-        }
-}
 
 //-------------temp sensor functions-------------
 void settemp(void)
@@ -880,24 +1161,23 @@ void noisesetup(void)
         P6->SEL0 |= (BIT7);
         P6->SEL1 &= ~(BIT7);
         P6->DIR |= (BIT7);
-       // P6->OUT &= ~(BIT7);
+        P6->OUT &= ~(BIT7);
         TIMER_A2->CCR[0] = 999;  //1000 clocks = 0.333 ms.  This is the period of everything on Timer A0.  0.333 < 16.666 ms so the on/off shouldn't
                                  //be visible with the human eye.  1000 makes easy math to calculate duty cycle.  No particular reason to use 1000.
-
-        TIMER_A2->CCTL[1] = 0b0000000011100000;  //reset / set compare.  Reset/Set makes easy math for duty cycle since the output is high until CCR[1]
-                                                 //is reached.  It turns off when CCR[0] is reached.  Duty Cycle = CCR[1]/CCR[0].
-
-        TIMER_A2->CCTL[2] = 0b0000000011100000;
-
-        TIMER_A2->CCTL[3] = 0b0000000011100000;
-        TIMER_A2->CCR[1]=499;
-        TIMER_A2->CCR[2]=499;
-        TIMER_A2->CCR[3]=499;
-        TIMER_A2->CCTL[4] = 0b0000000011100000;
-        TIMER_A2->CCR[4]=499;
+        TIMER_A2->CCTL[4] = 0b0000000011100000;//using P6.7 which is TimerA2.4
+        TIMER_A2->CCR[4]=0;
         //The next line turns on all of Timer A2.  None of the above will do anything until Timer A2 is started.
         TIMER_A2->CTL = 0b0000001000010100;  //up mode, smclk, taclr to load.  Up mode configuration turns on the output when CCR[1] is reached
                                              //and off when CCR[0] is reached. SMCLK is the master clock at 3,000,000 MHz.  TACLR must be set to load
                                              //in the changes to CTL register.
 }
-
+void alarmgooff(void)
+{
+    while(snooze==0)
+    {
+    TIMER_A2->CCR[4]=999;
+    __delay_cycles(150000);
+    TIMER_A2->CCR[4]=0;
+    __delay_cycles(150000);
+    }
+}
