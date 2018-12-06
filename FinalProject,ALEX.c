@@ -16,6 +16,7 @@ int timeout;
 void butt_init(void);
 void settime(void);
 void alarm_on_off(void);
+void noisesetup(void);
 int settime_pressed=0;
 int setalarm_pressed=0;
 int alarm_status=0;
@@ -68,7 +69,7 @@ void main(void)
     P1 -> OUT &= ~BIT0;
 
     int i,j; //loop integers
-
+    noisesetup();
     butt_init();
     SysTick_Init_interrupt();    //initialization of SysTick interrupt
     LCDinit();            //initialization of LCD
@@ -872,5 +873,31 @@ TIMER_A0 -> CCR[2] = 32000;
 TIMER_A0 -> CCTL[2] = TIMER_A_CCTLN_OUTMOD_7;
 TIMER_A0 -> CCR[3] = 32000;
 TIMER_A0 -> CCTL[3] = TIMER_A_CCTLN_OUTMOD_7;
-
 }
+
+void noisesetup(void)
+{
+        P6->SEL0 |= (BIT7);
+        P6->SEL1 &= ~(BIT7);
+        P6->DIR |= (BIT7);
+       // P6->OUT &= ~(BIT7);
+        TIMER_A2->CCR[0] = 999;  //1000 clocks = 0.333 ms.  This is the period of everything on Timer A0.  0.333 < 16.666 ms so the on/off shouldn't
+                                 //be visible with the human eye.  1000 makes easy math to calculate duty cycle.  No particular reason to use 1000.
+
+        TIMER_A2->CCTL[1] = 0b0000000011100000;  //reset / set compare.  Reset/Set makes easy math for duty cycle since the output is high until CCR[1]
+                                                 //is reached.  It turns off when CCR[0] is reached.  Duty Cycle = CCR[1]/CCR[0].
+
+        TIMER_A2->CCTL[2] = 0b0000000011100000;
+
+        TIMER_A2->CCTL[3] = 0b0000000011100000;
+        TIMER_A2->CCR[1]=499;
+        TIMER_A2->CCR[2]=499;
+        TIMER_A2->CCR[3]=499;
+        TIMER_A2->CCTL[4] = 0b0000000011100000;
+        TIMER_A2->CCR[4]=499;
+        //The next line turns on all of Timer A2.  None of the above will do anything until Timer A2 is started.
+        TIMER_A2->CTL = 0b0000001000010100;  //up mode, smclk, taclr to load.  Up mode configuration turns on the output when CCR[1] is reached
+                                             //and off when CCR[0] is reached. SMCLK is the master clock at 3,000,000 MHz.  TACLR must be set to load
+                                             //in the changes to CTL register.
+}
+
