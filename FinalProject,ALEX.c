@@ -74,6 +74,7 @@ int alarm_status=0;
     int  alarmamflag=1;
     int alarmpmflag=0;
     int snooze=0;
+    int speedset=0;
 //These flags will allow the program to determine if it only needs to print the ones digit
 //or if it needs to print both tens and ones digits for numbers greater than 10
 
@@ -103,7 +104,6 @@ void main(void)
 
     __enable_irq();                  /* global enable IRQs */
 
-   // init_display_screen();
     while(1)
     {
         settemp();
@@ -349,8 +349,15 @@ else
                                   }
                                   alarmamflag=0;
                               }
+if(speedset==0)
+{
+    sec = sec + 1;
+}
+if(speedset==1)
+{
+    sec = sec + 60;
+}
 
-                 sec = sec + 1;
 if(alarmhour==hour)
 {
     if(alarmmin==min)
@@ -361,8 +368,7 @@ if(alarmhour==hour)
             {
                 snooze=0;
                 alarmgooff();
-                command(0x97);
-                data(blank[0]);
+
             }
         }
     }
@@ -835,25 +841,33 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
        }
     if(P5->IFG & BIT4)//SNOOZE/DOWN BLUE
        {
-        snooze=1;
+      if(snooze=0)
+      {
         command(0x96);
         for(i=0;i<6;i++)
         {
             data(snoozebut[i]);
         }
         alarmmin=min+10;
+        command(0x97);
+        data(blank[0]);
+        snooze=1;
+      }
+
         P5->IFG &= ~(BIT0|BIT1|BIT2|BIT6|BIT7);
        }
     if(P5->IFG & BIT6)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 SECOND ALARM CLOCK TIME
        // WHITE
         {
-
+        speedset=0;
+        P1->OUT ^=BIT0;
         P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT7);
         }
     if(P5->IFG & BIT7)//CHANGE CLOCK SPEED 1 SECOND REAL TIME = 1 MINUTE ALARM CLOCK TIME
       //YELLOW
         {
-
+        speedset=1;
+        P1->OUT ^=BIT0;
         P5->IFG &= ~(BIT0|BIT1|BIT2|BIT4|BIT6);
         }
 
@@ -911,35 +925,6 @@ void data(unsigned char data)  //function to write data to the LCD
     nibblewrite(data <<4 , RS);
 
     __delay_cycles(3000);
-}
-void init_display_screen(void) //sets initial display of LCD
-{
-    int i;
-    char time[]= "HH:MM:SS XM";
-    char alarmstatus[]= "ALARM: ";
-    char alarmtime[]= "HH:MM XM";
-    char temperature[]= "XX.X F";
-    command(1);
-    command(0x80);
-    for(i=0;i<11;i++)
-    {
-       data(time[i]);
-    }
-    command(0xC0);
-    for(i=0;i<7;i++)
-    {
-       data(alarmstatus[i]);
-    }
-    command(0x90);
-    for(i=0;i<8;i++)
-    {
-       data(alarmtime[i]);
-    }
-    command(0xD0);
-    for(i=0;i<6;i++)
-    {
-       data(temperature[i]);
-    }
 }
 
 //-----------time functions -----------------
@@ -1196,8 +1181,8 @@ void alarmgooff(void)
     while(snooze==0)
     {
     TIMER_A2->CCR[4]=499;
-    __delay_cycles(150000);
+    __delay_cycles(3000000);
     TIMER_A2->CCR[4]=0;
-    __delay_cycles(150000);
+    __delay_cycles(3000000);
     }
 }
