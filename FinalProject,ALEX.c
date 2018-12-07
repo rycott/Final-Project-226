@@ -20,6 +20,10 @@ void alarmgooff(void);
 int settime_pressed=0;
 int setalarm_pressed=0;
 int alarm_status=0;
+int lightson=0;
+int intense=99;
+int alarmfullsec=0;
+int timefullsec=0;
 //LCD Function Declarations
 
     void delayMs (uint32_t n);
@@ -64,14 +68,14 @@ int alarm_status=0;
     char alarmminutes[60];
     char alarmhours[60];
     int  alarmsec = 0;
-    int  alarmmin = 2;
+    int  alarmmin = 6;
     int  alarmhour = 1;
     int  alarmsecflag = 0;
     int  alarmminflag = 0;
     int  alarmhourflag = 0;
     int  amflag=1;
     int  pmflag=0;
-    int  alarmamflag=1;
+    int alarmamflag=1;
     int alarmpmflag=0;
     int snooze=0;
     int speedset=0;
@@ -97,7 +101,7 @@ void main(void)
     PortADC_init();               //initialization of ADC Ports
     ADC14_init();                 //initialization of ADC
     NVIC->ISER[0] = 1 << ((ADC14_IRQn) & 31);   //enables ADC interrupt in  NVIC
-    delayMs(10);
+    __delay_cycles(30000);
 
     TIMER32_1->LOAD = 3000000-1;
     TIMER32_1->CONTROL = 0xC2; /* no prescaler, periodic wrapping mode, disable interrupt, 32-bit timer. */
@@ -138,7 +142,16 @@ void main(void)
                  {
                      minflag = 1;
                  }
-
+                 else if (min<10)
+                 {
+                     minflag = 0;
+                 }
+                 if(min<0)
+                 {
+                     hour= hour-1;
+                     min=59;
+                     minflag = 1;
+                 }
                  if(hour > 12) //this section allows to change between AM and PM
                  {
                      hour = 1;
@@ -156,11 +169,13 @@ void main(void)
                  sprintf(hours,"%d", hour); //displaying hours
                  if(hourflag == 0)
                  {
+                     command(0x86);
                      data(hours[0]);
                  }
 
                  else if(hourflag == 1)
                  {
+                     command(0x85);
                      for(i=0;i<2;i++)
                      {
                          data(hours[i]);
@@ -173,6 +188,7 @@ void main(void)
                  sprintf(minutes, "%d", min); //displaying minutes
                  if(minflag == 0)
                  {
+                     command(0x88);
                      data('0');
                      command(0x89);
                      data(minutes[0]);
@@ -238,10 +254,10 @@ else
                    data(alarmstatuson[i]);
                 }
          }
-                 command(0x90);  /* set cursor at beginning of first line */
+                 command(0x90);  /* set cursor at beginning of third line */
                  for(j=0; j<5;j++)
                  {
-                 data(alarmtime[j]); //prints TIME to line 1
+                 data(alarmtime[j]); //prints ALARMTIME to line 1
                  }
                  if(alarmsec>=60)  //this section checks if the seconds should roll into a minute
                         {
@@ -268,12 +284,27 @@ else
                         {
                             alarmminflag = 1;
                         }
+                        if(alarmmin<0)
+                         {
+                             alarmhour= alarmhour-1;
+                             alarmmin=59;
+                             alarmminflag = 1;
+                         }
 
                         if(hour > 12) //this section allows to change between AM and PM
                         {
                             alarmhour = 1;
                             alarmhourflag = 0;
-                            alarmpmflag=1;
+                            if(alarmamflag==1)
+                            {
+                                alarmpmflag=1;
+                                alarmamflag=0;
+                            }
+                            else  if(alarmpmflag==1)
+                            {
+                                alarmpmflag=0;
+                                alarmamflag=1;
+                            }
 
                         }
                         if(alarmhour >= 10)
@@ -281,29 +312,32 @@ else
                             alarmhourflag = 1;
                         }
                  //printing the clock time to the LCD
-                 command(0x96);
+                 command(0x95);
                  sprintf(alarmhours,"%d", alarmhour); //displaying hours
                  if(alarmhourflag == 0)
                  {
+                     command(0x96);
                      data(alarmhours[0]);
                  }
 
                  else if(alarmhourflag == 1)
                  {
+                     command(0x95);
                      for(i=0;i<2;i++)
                      {
                          data(alarmhours[i]);
                      }
                  }
 
-                 command(0x98);
+                 command(0x97);
                  data(':');
-                 command(0x99);
+                 command(0x98);
                  sprintf(alarmminutes, "%d", alarmmin); //displaying minutes
                  if(alarmminflag == 0)
                  {
+                     command(0x98);
                      data('0');
-                     command(0x9A);
+                     command(0x99);
                      data(alarmminutes[0]);
                  }
                  else if(alarmminflag == 1)
@@ -314,26 +348,9 @@ else
                       }
                  }
 
-                 command(0x9B);
-                 data(':');
-                 command(0x9C);
-                 sprintf(alarmseconds, "%d", alarmsec); //displaying seconds
-                 if(alarmsecflag == 0)
-                 {
-                     data('0');
-                     command(0x9C);
-                     data(alarmseconds[0]);
-                 }
-                 else if(alarmsecflag == 1)
-                 {
-                     for(i=0;i<2;i++)
-                     {
-                         data(alarmseconds[i]);
-                     }
-                 }
                  if (alarmamflag==1)
                               {
-                                  command(0x9E);
+                                  command(0x9B);
                                   for(i=0;i<2;i++)
                                   {
                                       data(am[i]);
@@ -342,30 +359,30 @@ else
                               }
                   if (alarmpmflag==1)
                               {
-                                  command(0x9E);
+                                  command(0x9B);
                                   for(i=0;i<2;i++)
                                   {
                                       data(pm[i]);
                                   }
                                   alarmamflag=0;
                               }
-if(speedset==0)
-{
-    sec = sec + 1;
-}
-if(speedset==1)
-{
-    sec = sec + 60;
-}
 
-if(alarmhour==hour)
+if((alarmamflag==amflag) | (alarmpmflag==pmflag))
 {
+if(alarmhour==hour)
+  {
+    if(alarmmin<=(min+5))
+    {
+        if(alarm_status==1)
+        {
+            TIMER_A2->CCR[3]=999-(intense*10);
+            lightson=1;
+        }
     if(alarmmin==min)
     {
         if(alarm_status==1)
         {
-            if((alarmamflag==amflag) | (alarmpmflag==pmflag))
-            {
+
                 snooze=0;
                 alarmgooff();
 
@@ -373,29 +390,31 @@ if(alarmhour==hour)
         }
     }
 
+  }
+}
+if(lightson==1)
+{
+    alarmfullsec=(alarmmin*60)+alarmsec;
+    timefullsec=((min*60)+sec);
+    intense=(alarmfullsec-timefullsec)/3;
+    if(intense>=100)
+       {
+         intense=100;
+       }
+    TIMER_A2->CCR[3]=(100-intense)*9.99;
+
+}
+if(speedset==0)
+{
+    sec = sec + 1;
+}
+if(speedset==1)
+{
+    min = min + 1;
 }
                  while((TIMER32_1 -> RIS & 1) == 0); //waits 1 second until interrupt flag is set
                  TIMER32_1 -> INTCLR = 0; //clears interrupt flag
 
-
-// main code serial input
-//readInput(string); // Read the input up to \n, store in string.  This function doesn't return until \n is received
-//        puts(string);
-//        if(string[0] != '\0') // if string is not empty, check the inputted data.
-//             {
-//
-//                if(string[0] == 'T') //Setting the time for the clock
-//             {
-//
-//             }
-//
-//                if(string[0] == 'A') //setting the alarm time
-//                {
-//
-//                }
-//
-//
-//             }
     }
 }
 
@@ -442,13 +461,24 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                  {
                      hour = 1;
                      hourflag = 0;
-                     amflag=0;
-                     pmflag=1;
-
+                     if(amflag==1)
+                     {
+                        pmflag=1;
+                        amflag=0;
+                     }
+                     else if(pmflag==1)
+                     {
+                         pmflag=0;
+                         amflag=1;
+                     }
                  }
                if(hour >= 10)
                  {
                      hourflag = 1;
+                 }
+               else if(hour<10)
+                 {
+                      hourflag = 0;
                  }
                if (amflag==1)
                             {
@@ -457,7 +487,7 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                 {
                                     data(am[i]);
                                 }
-                                pmflag=0;
+
                             }
                 if (pmflag==1)
                             {
@@ -466,21 +496,23 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                 {
                                     data(pm[i]);
                                 }
-                                amflag=0;
+
                             }
 
                command(0x85);
                sprintf(hours,"%d", hour); //displaying hours
                              if(hourflag == 0)
                              {
+                                 command(0x86);
                                  data(hours[0]);
-                              command(0x86);
-                              data(blank[0]);
+                                 command(0x85);
+                                 data(blank[0]);
 
                              }
 
                              else if(hourflag == 1)
                              {
+                                 command(0x85);
                                  for(i=0;i<2;i++)
                                  {
                                      data(hours[i]);
@@ -495,44 +527,56 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                   if(hour < 1) //this section allows to change between AM and PM
                               {
                                   hour = 12;
-                                  hourflag = 0;
-                                  amflag=0;
-                                  pmflag=1;
+                                  hourflag = 1;
+                                  if(amflag==1)
+                                  {
+                                    pmflag=1;
+                                    amflag=0;
+                                  }
+                                 else if(pmflag==1)
+                                  {
+                                    pmflag=0;
+                                    amflag=1;
+                                  }
                               }
                   if(hour >= 10)
                     {
                         hourflag = 1;
                     }
+                  else if(hour<10)
+                  {
+                       hourflag = 0;
+                  }
                   if (amflag==1)
                                {
-                                   command(0x8E);
-                                   for(i=0;i<2;i++)
-                                   {
-                                       data(am[i]);
-                                   }
-                                   pmflag=0;
+                               command(0x8E);
+                               for(i=0;i<2;i++)
+                               {
+                                   data(am[i]);
+                               }
+
                                }
                    if (pmflag==1)
                                {
-                                   command(0x8E);
-                                   for(i=0;i<2;i++)
-                                   {
-                                       data(pm[i]);
-                                   }
-                                   amflag=0;
+                               command(0x8E);
+                               for(i=0;i<2;i++)
+                               {
+                                   data(pm[i]);
+                               }
                                }
 
-                  command(0x85);
                   sprintf(hours,"%d", hour); //displaying hours
                                 if(hourflag == 0)
                                 {
-                                    data(hours[0]);
                                     command(0x86);
+                                    data(hours[0]);
+                                    command(0x85);
                                     data(blank[0]);
                                 }
 
-                                else if(hourflag == 1)
+                                if(hourflag == 1)
                                 {
+                                    command(0x85);
                                     for(i=0;i<2;i++)
                                     {
                                         data(hours[i]);
@@ -564,12 +608,24 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                {
                                    minflag = 1;
                                }
+                               else if(min<10)
+                               {
+                                   minflag = 0;
+                               }
+                               if(min<0)
+                               {
+                                   hour = hour-1;
+                                   min = 59;
+                                   minflag = 1;
+                               }
+
                           command(0x87);
                           data(':');
                           command(0x88);
                           sprintf(minutes, "%d", min); //displaying minutes
                           if(minflag == 0)
                           {
+                              command(0x88);
                               data('0');
                               command(0x89);
                               data(minutes[0]);
@@ -598,12 +654,24 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                              {
                                                  minflag = 1;
                                              }
+                                             else if(min<10)
+                                             {
+                                                 minflag = 0;
+                                             }
+                                             if(min<0)
+                                             {
+                                                 hour= hour-1;
+                                                 min=59;
+                                                 minflag = 1;
+                                             }
+
                                         command(0x87);
                                         data(':');
                                         command(0x88);
                                         sprintf(minutes, "%d", min); //displaying minutes
                                         if(minflag == 0)
                                         {
+                                            command(0x88);
                                             data('0');
                                             command(0x89);
                                             data(minutes[0]);
@@ -644,48 +712,58 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                    {
                        alarmhour = 1;
                        alarmhourflag = 0;
-                       alarmamflag=1;
-                       alarmpmflag=0;
-
+                       if(alarmamflag==1)
+                       {
+                          alarmpmflag=1;
+                          alarmamflag=0;
+                       }
+                       else if(alarmpmflag==1)
+                       {
+                         alarmpmflag=0;
+                         alarmamflag=1;
+                       }
                    }
                  if(alarmhour >= 10)
                    {
                        alarmhourflag = 1;
                    }
 
-                 command(0x96);
+                 command(0x95);
                  sprintf(alarmhours,"%d", alarmhour); //displaying hours
                                if(alarmhourflag == 0)
                                {
+                                   command(0x96);
                                    data(alarmhours[0]);
-                                   command(0x97);
+                                   command(0x95);
                                    data(blank[0]);
                                }
 
                                else if(alarmhourflag == 1)
                                {
+                                   command(0x95);
                                    for(i=0;i<2;i++)
                                    {
+
                                        data(alarmhours[i]);
                                    }
                                }
                                if (alarmamflag==1)
                                            {
-                                               command(0x9E);
+                                               command(0x9B);
                                                for(i=0;i<2;i++)
                                                {
                                                    data(am[i]);
                                                }
-                                               alarmpmflag=0;
+
                                            }
                                if (alarmpmflag==1)
                                            {
-                                               command(0x9E);
+                                               command(0x9B);
                                                for(i=0;i<2;i++)
                                                {
                                                    data(pm[i]);
                                                }
-                                               alarmamflag=0;
+
                                            }
 
              }
@@ -697,8 +775,16 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                 {
                                     alarmhour = 12;
                                     alarmhourflag = 0;
-                                    alarmamflag=0;
-                                    alarmpmflag=1;
+                                    if(alarmamflag==1)
+                                    {
+                                       alarmpmflag=1;
+                                       alarmamflag=0;
+                                    }
+                                    else if(alarmpmflag==1)
+                                    {
+                                      alarmpmflag=0;
+                                      alarmamflag=1;
+                                    }
                                 }
                     if(alarmhour >= 10)
                       {
@@ -706,34 +792,36 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                       }
                     if (alarmamflag==1)
                                   {
-                                      command(0x9E);
+                                      command(0x9B);
                                       for(i=0;i<2;i++)
                                       {
                                           data(am[i]);
                                       }
-                                      alarmpmflag=0;
+
                                   }
-                      if (alarmpmflag==1)
+                    if (alarmpmflag==1)
                                   {
-                                      command(0x9E);
+                                      command(0x9B);
                                       for(i=0;i<2;i++)
                                       {
                                           data(pm[i]);
                                       }
-                                      alarmamflag=0;
+
                                   }
 
-                    command(0x96);
+                    command(0x95);
                     sprintf(alarmhours,"%d", alarmhour); //displaying hours
                                   if(alarmhourflag == 0)
                                   {
+                                      command(0x96);
                                       data(alarmhours[0]);
-                                      command(0x97);
+                                      command(0x95);
                                       data(blank[0]);
                                   }
 
                                   else if(alarmhourflag == 1)
                                   {
+                                      command(0x95);
                                       for(i=0;i<2;i++)
                                       {
                                           data(alarmhours[i]);
@@ -761,18 +849,30 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                      alarmminflag = 0;
                                      alarmhour = alarmhour +1;
                                  }
-                                 if(min>=10)
+                                 if(alarmmin>=10)
                                  {
                                      alarmminflag = 1;
                                  }
-                            command(0x98);
+                                 else if(alarmmin<10)
+                                 {
+                                     alarmminflag = 0;
+                                 }
+                                 if(alarmmin<0)
+                                 {
+                                     alarmhour= alarmhour-1;
+                                     alarmmin=59;
+                                     alarmminflag = 1;
+                                 }
+
+                            command(0x97);
                             data(':');
-                            command(0x99);
+                            command(0x98);
                             sprintf(alarmminutes, "%d", alarmmin); //displaying minutes
                             if(alarmminflag == 0)
                             {
+                                command(0x98);
                                 data('0');
-                                command(0x9A);
+                                command(0x99);
                                 data(alarmminutes[0]);
                             }
                             else if(alarmminflag == 1)
@@ -795,18 +895,29 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                                    alarmminflag = 0;
                                                    alarmhour = alarmhour +1;
                                                }
-                                               if(min>=10)
+                                               if(alarmmin>=10)
                                                {
                                                    alarmminflag = 1;
                                                }
-                                          command(0x98);
+                                               else if(alarmmin<10)
+                                               {
+                                                   alarmminflag = 0;
+                                               }
+                                               if(alarmmin<0)
+                                               {
+                                                   alarmhour= alarmhour-1;
+                                                   alarmmin=59;
+                                                   alarmminflag = 1;
+                                               }
+                                          command(0x97);
                                           data(':');
-                                          command(0x99);
+                                          command(0x98);
                                           sprintf(alarmminutes, "%d", alarmmin); //displaying minutes
                                           if(alarmminflag == 0)
                                           {
+                                              command(0x98);
                                               data('0');
-                                              command(0x9A);
+                                              command(0x99);
                                               data(alarmminutes[0]);
                                           }
                                           else if(alarmminflag == 1)
@@ -817,7 +928,7 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
                                                }
                                           }
                                            }
-                            command(0x8C);
+                            command(0x99);
                 if(P5->IFG & BIT1)
                     {
                         P5->IFG &= ~BIT1;
@@ -841,17 +952,30 @@ void PORT5_IRQHandler(void) //IRQ Handler for button interrupts
        }
     if(P5->IFG & BIT4)//SNOOZE/DOWN BLUE
        {
-      if(snooze=0)
+      if(snooze==0)
       {
-        command(0x96);
+        command(0xCA);
         for(i=0;i<6;i++)
         {
             data(snoozebut[i]);
         }
         alarmmin=min+10;
-        command(0x97);
+        __delay_cycles(3000000);
+        command(0xCA);
+        data(blank[0]);
+        command(0xCB);
+        data(blank[0]);
+        command(0xCC);
+        data(blank[0]);
+        command(0xCD);
+        data(blank[0]);
+        command(0xCE);
+        data(blank[0]);
+        command(0xCF);
         data(blank[0]);
         snooze=1;
+        lightson=0;
+        TIMER_A2->CCR[3]=0;
       }
 
         P5->IFG &= ~(BIT0|BIT1|BIT2|BIT6|BIT7);
@@ -934,7 +1058,6 @@ void data(unsigned char data)  //function to write data to the LCD
 void settemp(void)
 {
     int i;
-    char fer[100];
     char temp[]= "TEMP is XX.X F";
     float volt;
     float mvolt;
@@ -1013,88 +1136,6 @@ void delayMs(uint32_t n)  //setup the delay function
 
  }
 
-//-------- UART functions --------------
-
-/*----------------------------------------------------------------
- * void writeOutput(char *string)
- *
- * Description:  This is a function similar to most serial port
- * functions like printf.  Written as a demonstration and not
- * production worthy due to limitations.
- * One limitation is poor memory management.
- * Inputs: Pointer to a string that has a string to send to the serial.
- * Outputs: Places the data on the serial output.
-----------------------------------------------------------------*/
-void writeOutput(char *string)
-{
-    int i = 0;  // Location in the char array "string" that is being written to
-
-    while(string[i] != '\0') {
-        EUSCI_A0->TXBUF = string[i];
-        i++;
-        while(!(EUSCI_A0->IFG & BIT1));
-    }
-}
-
-/*----------------------------------------------------------------
- * void readInput(char *string)
- *
- * Description:  This is a function similar to most serial port
- * functions like ReadLine.  Written as a demonstration and not
- * production worthy due to limitations.
- * One of the limitations is that it is BLOCKING which means
- * it will wait in this function until there is a \n on the
- * serial input.
- * Another limitation is poor memory management.
- * Inputs: Pointer to a string that will have information stored
- * in it.
- * Outputs: Places the serial data in the string that was passed
- * to it.  Updates the global variables of locations in the
- * INPUT_BUFFER that have been already read.
-----------------------------------------------------------------*/
-void readInput(char *string)
-{
-    int i = 0;  // Location in the char array "string" that is being written to
-
-    // One of the few do/while loops I've written, but need to read a character before checking to see if a \n has been read
-    do
-    {
-        // If a new line hasn't been found yet, but we are caught up to what has been received, wait here for new data
-        while(read_location == storage_location && INPUT_BUFFER[read_location] != '\n');
-        string[i] = INPUT_BUFFER[read_location];  // Manual copy of valid character into "string"
-        INPUT_BUFFER[read_location] = '\0';
-        i++; // Increment the location in "string" for next piece of data
-        read_location++; // Increment location in INPUT_BUFFER that has been read
-        if(read_location == BUFFER_SIZE)  // If the end of INPUT_BUFFER has been reached, loop back to 0
-            read_location = 0;
-    }
-    while(string[i-1] != '\n'); // If a \n was just read, break out of the while loop
-
-    string[i-1] = '\0'; // Replace the \n with a \0 to end the string when returning this function
-}
-
-/*----------------------------------------------------------------
- * void EUSCIA0_IRQHandler(void)
- *
- * Description: Interrupt handler for serial communication on EUSCIA0.
- * Stores the data in the RXBUF into the INPUT_BUFFER global character
- * array for reading in the main application
- * Inputs: None (Interrupt)
- * Outputs: Data stored in the global INPUT_BUFFER. storage_location
- * in the INPUT_BUFFER updated.
-----------------------------------------------------------------*/
-void EUSCIA0_IRQHandler(void)
-{
-    if (EUSCI_A0->IFG & BIT0)  // Interrupt on the receive line
-    {
-        INPUT_BUFFER[storage_location] = EUSCI_A0->RXBUF; // store the new piece of data at the present location in the buffer
-        EUSCI_A0->IFG &= ~BIT0; // Clear the interrupt flag right away in case new data is ready
-        storage_location++; // update to the next position in the buffer
-        if(storage_location == BUFFER_SIZE) // if the end of the buffer was reached, loop back to the start
-            storage_location = 0;
-    }
-}
-
 /*----------------------------------------------------------------
  * void setupP1()
  * Sets up P1.0 as a GPIO output initialized to 0.
@@ -1109,38 +1150,6 @@ void setupP1()
     P1->SEL1 &= ~BIT0;
     P1->DIR  |=  BIT0; //OUTPUT
     P1->OUT  &= ~BIT0; //Start as off
-}
-
-/*----------------------------------------------------------------
- * void setupSerial()
- * Sets up the serial port EUSCI_A0 as 115200 8E2 (8 bits, Even parity,
- * two stops bit.)  Enables the interrupt so that received data will
- * results in an interrupt.
- * Description:
- * Inputs: None
- * Outputs: None
-----------------------------------------------------------------*/
-void setupSerial()
-{
-    P1->SEL0 |=  (BIT2 | BIT3); // P1.2 and P1.3 are EUSCI_A0 RX
-    P1->SEL1 &= ~(BIT2 | BIT3); // and TX respectively.
-
-    EUSCI_A0->CTLW0  = BIT0; // Disables EUSCI. Default configuration is 8N1
-    EUSCI_A0->CTLW0 |= BIT7; // Connects to SMCLK BIT[7:6] = 10
-    EUSCI_A0->CTLW0 |= (BIT(15)|BIT(14)|BIT(11));  //BIT15 = Parity, BIT14 = Even, BIT11 = Two Stop Bits
-    // Baud Rate Configuration
-    // 3000000/(16*115200) = 1.628  (3 MHz at 115200 bps is fast enough to turn on over sampling (UCOS = /16))
-    // UCOS16 = 1 (0ver sampling, /16 turned on)
-    // UCBR  = 1 (Whole portion of the divide)
-    // UCBRF = .628 * 16 = 10 (0x0A) (Remainder of the divide)
-    // UCBRS = 3000000/115200 remainder=0.04 -> 0x01 (look up table 22-4)
-    EUSCI_A0->BRW = 1;  // UCBR Value from above
-    EUSCI_A0->MCTLW = 0x01A1; //UCBRS (Bits 15-8) & UCBRF (Bits 7-4) & UCOS16 (Bit 0)
-
-    EUSCI_A0->CTLW0 &= ~BIT0;  // Enable EUSCI
-    EUSCI_A0->IFG &= ~BIT0;    // Clear interrupt
-    EUSCI_A0->IE |= BIT0;      // Enable interrupt
-    NVIC_EnableIRQ(EUSCIA0_IRQn);
 }
 
 void TA_init(void)
@@ -1167,8 +1176,14 @@ void noisesetup(void)
         P6->SEL1 &= ~(BIT7);
         P6->DIR |= (BIT7);
         P6->OUT &= ~(BIT7);
+        P6->SEL0 |= (BIT6);
+        P6->SEL1 &= ~(BIT6);
+        P6->DIR |= (BIT6);
+        P6->OUT &= ~(BIT6);
         TIMER_A2->CCR[0] = 999;  //1000 clocks = 0.333 ms.  This is the period of everything on Timer A0.  0.333 < 16.666 ms so the on/off shouldn't
                                  //be visible with the human eye.  1000 makes easy math to calculate duty cycle.  No particular reason to use 1000.
+        TIMER_A2->CCTL[3] = 0b0000000011100000;//using P6.7 which is TimerA2.4
+        TIMER_A2->CCR[3]= 0;
         TIMER_A2->CCTL[4] = 0b0000000011100000;//using P6.7 which is TimerA2.4
         TIMER_A2->CCR[4]= 0;
         //The next line turns on all of Timer A2.  None of the above will do anything until Timer A2 is started.
@@ -1180,6 +1195,7 @@ void alarmgooff(void)
 {
     while(snooze==0)
     {
+    TIMER_A2->CCR[3]=999;
     TIMER_A2->CCR[4]=499;
     __delay_cycles(3000000);
     TIMER_A2->CCR[4]=0;
